@@ -1,8 +1,10 @@
 #!/bin/sh
 set -e
-echo "[start-web] Running prisma db push..."
+echo "[web] Running prisma db push..."
 npx prisma db push --skip-generate
-echo "[start-web] Running seed..."
+echo "[web] Seeding provinces..."
 npx tsx prisma/seed.ts || true
-echo "[start-web] Starting Next.js..."
-node server.js
+echo "[web] Starting cron worker in background..."
+npx tsx worker.ts &
+echo "[web] Starting Next.js..."
+exec npx next start -p "${PORT:-3000}"

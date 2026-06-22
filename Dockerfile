@@ -9,15 +9,14 @@ COPY package.json package-lock.json* ./
 COPY prisma ./prisma
 RUN npm ci
 
-# --- Builder (Next standalone) ---
+# --- Builder ---
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# prisma generate doesn't need a live DB — only reads schema
 RUN npx prisma generate
 RUN npm run build
 
-# --- Worker runner (cron + migrations) ---
+# --- Worker (standalone cron runner) ---
 FROM base AS worker
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
@@ -26,15 +25,14 @@ COPY . .
 RUN chmod +x ./scripts/start-worker.sh
 CMD ["sh", "./scripts/start-worker.sh"]
 
-# --- Web runner (Next.js) — default target ---
+# --- Web + Worker combined (free tier: one service) ---
 FROM base AS web
 ENV NODE_ENV=production
-RUN addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -S nextjs
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder /app/prisma ./prisma
-USER nextjs
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/.next ./.next
+COPY . .
+RUN chmod +x ./scripts/start-web.sh
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
-CMD ["node", "server.js"]
+CMD ["sh", "./scripts/start-web.sh"]
