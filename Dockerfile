@@ -13,7 +13,9 @@ RUN npm ci
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate && npm run build
+# prisma generate doesn't need a live DB — only reads schema
+RUN npx prisma generate
+RUN npm run build
 
 # --- Web runner (Next.js) ---
 FROM base AS web
@@ -28,10 +30,11 @@ EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 CMD ["node", "server.js"]
 
-# --- Worker runner (cron) ---
+# --- Worker runner (cron + migrations) ---
 FROM base AS worker
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY . .
-CMD ["npx", "tsx", "worker.ts"]
+RUN chmod +x ./scripts/start-worker.sh
+CMD ["sh", "./scripts/start-worker.sh"]

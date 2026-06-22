@@ -1,0 +1,94 @@
+services:
+  # ── Web (Next.js) ──────────────────────────────────────────────────────────
+  - type: web
+    name: cupet-watcher-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: node server.js
+    buildTarget: web
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cupet-db
+          property: connectionString
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: XUTIL_BASE
+        value: https://ticket.xutil.net/apps/bienestar/api
+      - key: XUTIL_OAUTH_URL
+        value: https://ticket.xutil.net/oauth2/token
+      - key: XUTIL_APP_HEADER
+        value: agencia-citas
+      - key: XUTIL_SCRAPER_USER
+        sync: false
+      - key: XUTIL_SCRAPER_PASS
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: NODE_ENV
+        value: production
+
+  # ── Worker (node-cron) ─────────────────────────────────────────────────────
+  - type: worker
+    name: cupet-watcher-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    buildTarget: worker
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cupet-db
+          property: connectionString
+      - key: AUTH_SECRET
+        fromService:
+          name: cupet-watcher-web
+          type: web
+          envVarKey: AUTH_SECRET
+      - key: ENCRYPTION_KEY
+        fromService:
+          name: cupet-watcher-web
+          type: web
+          envVarKey: ENCRYPTION_KEY
+      - key: XUTIL_BASE
+        value: https://ticket.xutil.net/apps/bienestar/api
+      - key: XUTIL_OAUTH_URL
+        value: https://ticket.xutil.net/oauth2/token
+      - key: XUTIL_APP_HEADER
+        value: agencia-citas
+      - key: XUTIL_SCRAPER_USER
+        fromService:
+          name: cupet-watcher-web
+          type: web
+          envVarKey: XUTIL_SCRAPER_USER
+      - key: XUTIL_SCRAPER_PASS
+        fromService:
+          name: cupet-watcher-web
+          type: web
+          envVarKey: XUTIL_SCRAPER_PASS
+      - key: RESEND_API_KEY
+        fromService:
+          name: cupet-watcher-web
+          type: web
+          envVarKey: RESEND_API_KEY
+      - key: EMAIL_FROM
+        fromService:
+          name: cupet-watcher-web
+          type: web
+          envVarKey: EMAIL_FROM
+      - key: NODE_ENV
+        value: production
+
+databases:
+  - name: cupet-db
+    plan: free
+    databaseName: cupet
+    user: cupet
