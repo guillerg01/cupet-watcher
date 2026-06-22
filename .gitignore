@@ -1,0 +1,20 @@
+node_modules
+.next
+out
+build
+dist
+
+# env
+.env
+.env*.local
+
+# prisma
+prisma/*.db
+
+# misc
+.DS_Store
+*.log
+npm-debug.log*
+coverage
+.vercel
+next-env.d.ts

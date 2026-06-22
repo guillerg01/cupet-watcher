@@ -1,0 +1,170 @@
+// Cupet Watcher — Prisma schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ----- App users (our own auth) -----
+model AppUser {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime       @default(now())
+
+  provinces    UserProvince[]
+  xutilLink    XutilLink?
+  notifications Notification[]
+
+  // notification prefs
+  notifyNew        Boolean @default(true) // new cupet appears
+  notifyAvailable  Boolean @default(true) // became available
+  notifyWaitroom   Boolean @default(false)
+}
+
+// xutil token of an end-user (only for personal actions; encrypted)
+model XutilLink {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  xutilUsername  String
+  encryptedToken String   // AES-256-GCM
+  tokenExp       DateTime
+  createdAt      DateTime @default(now())
+}
+
+// Single-row scraper service account token (encrypted)
+model ScraperCredential {
+  id             Int      @id @default(1)
+  username       String
+  encryptedToken String
+  tokenExp       DateTime
+  refreshToken   String?
+  updatedAt      DateTime @updatedAt
+}
+
+// ----- Geography -----
+model Province {
+  id            Int            @id // xutil province id
+  name          String
+  stations      Station[]
+  userProvinces UserProvince[]
+  events        DetectionEvent[]
+}
+
+model UserProvince {
+  userId     String
+  provinceId Int
+  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  province   Province @relation(fields: [provinceId], references: [id], onDelete: Cascade)
+
+  @@id([userId, provinceId])
+}
+
+// ----- Stations (fuel services / "cupets") -----
+model Station {
+  id                  Int               @id // xutil local_servicio id
+  name                String
+  establishment       String
+  provinceId          Int
+  province            Province          @relation(fields: [provinceId], references: [id])
+  municipio           String?
+  lat                 Float?
+  lng                 Float?
+  admiteSalaEspera    Boolean           @default(false)
+  tieneValidacion     Boolean           @default(false)
+  disponibilidades    Int               @default(0)
+  active              Boolean           @default(true)
+  firstSeenAt         DateTime          @default(now())
+  lastSeenAt          DateTime          @default(now())
+
+  snapshots           StationSnapshot[]
+  events              DetectionEvent[]
+
+  @@index([provinceId])
+  @@index([active])
+}
+
+// Time-series: queue fill + availability per scrape
+model StationSnapshot {
+  id              BigInt   @id @default(autoincrement())
+  stationId       Int
+  station         Station  @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  ts              DateTime @default(now())
+  disponible      Boolean  @default(false)
+  disponibilidades Int     @default(0)
+  views           Int?
+  rating          Float?
+  queuePosicion   Int?
+  queueTotal      Int?
+
+  @@index([stationId, ts])
+  @@index([ts])
+}
+
+enum DetectionType {
+  NEW
+  BECAME_AVAILABLE
+  WAITROOM_ENABLED
+}
+
+model DetectionEvent {
+  id          String        @id @default(cuid())
+  stationId   Int
+  station     Station       @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  provinceId  Int
+  province    Province      @relation(fields: [provinceId], references: [id])
+  type        DetectionType
+  detectedAt  DateTime      @default(now())
+  notified    Boolean       @default(false)
+
+  notifications Notification[]
+
+  @@index([notified])
+  @@index([provinceId, detectedAt])
+}
+
+enum NotificationChannel {
+  EMAIL
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      AppUser             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId   String
+  event     DetectionEvent      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel @default(EMAIL)
+  status    NotificationStatus  @default(PENDING)
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime            @default(now())
+
+  @@unique([userId, eventId])
+  @@index([status])
+}
+
+// Precomputed "best time to fuel" aggregates
+model PredictionCache {
+  id         String   @id @default(cuid())
+  scope      String   // "station:123" | "province:5"
+  dow        Int      // 0..6
+  hour       Int      // 0..23
+  avgFill    Float    // avg posicion/total (0..1), lower = emptier
+  avgAvail   Float    // avg disponibilidades
+  samples    Int
+  score      Float    // composite (higher = better moment)
+  computedAt DateTime @default(now())
+
+  @@unique([scope, dow, hour])
+  @@index([scope])
+}
