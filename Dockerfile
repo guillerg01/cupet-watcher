@@ -17,7 +17,16 @@ COPY . .
 RUN npx prisma generate
 RUN npm run build
 
-# --- Web runner (Next.js) ---
+# --- Worker runner (cron + migrations) ---
+FROM base AS worker
+ENV NODE_ENV=production
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY . .
+RUN chmod +x ./scripts/start-worker.sh
+CMD ["sh", "./scripts/start-worker.sh"]
+
+# --- Web runner (Next.js) — default target ---
 FROM base AS web
 ENV NODE_ENV=production
 RUN addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -S nextjs
@@ -29,12 +38,3 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 CMD ["node", "server.js"]
-
-# --- Worker runner (cron + migrations) ---
-FROM base AS worker
-ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY . .
-RUN chmod +x ./scripts/start-worker.sh
-CMD ["sh", "./scripts/start-worker.sh"]
