@@ -29,6 +29,10 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      - key: AUTH_TRUST_HOST
+        value: "true"
+      - key: AUTH_URL
+        value: https://cupet-watcher-web.onrender.com
       - key: NODE_ENV
         value: production
 

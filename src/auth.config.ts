@@ -3,6 +3,7 @@ import type { NextAuthConfig } from "next-auth";
 const THIRTY_DAYS_S = 30 * 24 * 60 * 60;
 
 export const authConfig = {
+  trustHost: true,
   session: {
     strategy: "jwt",
     maxAge: THIRTY_DAYS_S,
