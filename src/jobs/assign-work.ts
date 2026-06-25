@@ -38,7 +38,8 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
       ticketLinked: true,
       lastHeartbeatAt: MoreThan(new Date(now - ONLINE_WINDOW_MS)),
     },
-    order: { lastAssignedAt: "ASC" },
+    // NULLS FIRST so a brand-new device (never assigned) is picked first.
+    order: { lastAssignedAt: { direction: "ASC", nulls: "FIRST" } },
   });
   const deviceIds = onlineDevices.map((d) => d.id);
 

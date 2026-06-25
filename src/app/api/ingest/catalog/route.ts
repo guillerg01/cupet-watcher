@@ -99,7 +99,10 @@ export async function POST(req: Request): Promise<Response> {
     ]),
   );
 
-  const eventDrafts = detect({ prior, current });
+  // Cold start: the first sweep populates the DB as a BASELINE. Without this,
+  // every station would diff as NEW and flood notifications.
+  const isFirstSweep = existingStations.length === 0;
+  const eventDrafts = isFirstSweep ? [] : detect({ prior, current });
 
   const seenIds = new Set<number>();
   const now = new Date();
