@@ -40,7 +40,9 @@ export function createDataSource(synchronize = false): DataSource {
       process.env.DATABASE_URL?.includes("render.com") ||
       process.env.DATABASE_URL?.includes("neon.tech")
         ? { rejectUnauthorized: false }
-        : undefined,
+        : process.env.NODE_ENV === "production"
+          ? { rejectUnauthorized: false }
+          : undefined,
   });
 }
 
