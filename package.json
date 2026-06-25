@@ -13,7 +13,8 @@
     "scrape:once": "tsx src/jobs/run-once.ts",
     "xutil:test-login": "tsx scripts/test-xutil-login.ts",
     "db:sync": "tsx scripts/sync-db.ts",
-    "db:bootstrap": "tsx scripts/sync-db.ts"
+    "db:bootstrap": "tsx scripts/sync-db.ts",
+    "db:seed-admin": "tsx scripts/seed-admin.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

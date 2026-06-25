@@ -13,6 +13,10 @@ services:
         sync: false
       - key: AUTH_SECRET
         generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
       - key: ENCRYPTION_KEY
         generateValue: true
       - key: XUTIL_BASE

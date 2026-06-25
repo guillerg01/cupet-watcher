@@ -10,9 +10,11 @@ import { Notification } from "./notification.entity";
 import { PredictionCache } from "./prediction-cache.entity";
 import { Device } from "./device.entity";
 import { Assignment } from "./assignment.entity";
+import { AuthAttempt } from "./auth-attempt.entity";
 
 export const entities = [
   AppUser,
+  AuthAttempt,
   XutilLink,
   ScraperCredential,
   Province,
@@ -38,5 +40,6 @@ export type { Notification } from "./notification.entity";
 export type { PredictionCache } from "./prediction-cache.entity";
 export type { Device } from "./device.entity";
 export type { Assignment } from "./assignment.entity";
+export type { AuthAttempt } from "./auth-attempt.entity";
 
 export * from "./enums";

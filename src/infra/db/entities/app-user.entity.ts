@@ -10,6 +10,7 @@ import {
 import type { UserProvince } from "./user-province.entity";
 import type { XutilLink } from "./xutil-link.entity";
 import type { Notification } from "./notification.entity";
+import { UserRole } from "./enums";
 import { newId } from "../id";
 
 @Entity("AppUser")
@@ -25,6 +26,9 @@ export class AppUser {
 
   @Column({ type: "varchar", nullable: true })
   name!: string | null;
+
+  @Column({ type: "enum", enum: UserRole, default: UserRole.USER })
+  role!: UserRole;
 
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;

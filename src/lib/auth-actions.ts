@@ -2,10 +2,12 @@
 
 import { z } from "zod";
 import { hash } from "bcryptjs";
-import { repo, AppUser, UserProvince } from "@/infra/db";
+import { repo, AppUser, UserProvince, UserRole } from "@/infra/db";
 import { signIn, auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
+import { logAuthAttempt } from "@/lib/auth-attempts";
+import { isAdminRole } from "@/lib/admin";
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -30,6 +32,10 @@ export async function loginAction(_prevState: ActionResult, formData: FormData):
 
   const parsed = loginSchema.safeParse(raw);
   if (!parsed.success) {
+    const email = typeof raw.email === "string" ? raw.email : "";
+    if (email) {
+      await logAuthAttempt({ email, success: false, reason: "invalid_form" });
+    }
     return { error: parsed.error.errors[0].message };
   }
 
@@ -53,6 +59,10 @@ export async function loginAction(_prevState: ActionResult, formData: FormData):
   const session = await auth();
   if (!session?.user?.id) {
     return { error: "No se pudo iniciar sesión" };
+  }
+
+  if (isAdminRole(session.user.role)) {
+    redirect("/admin");
   }
 
   const userProvinceRepo = await repo(UserProvince);
@@ -90,6 +100,7 @@ export async function registerAction(
     email,
     passwordHash,
     name: name && name.trim() ? name.trim() : email.split("@")[0],
+    role: UserRole.USER,
     notifyNew: true,
     notifyAvailable: false,
     notifyWaitroom: false,

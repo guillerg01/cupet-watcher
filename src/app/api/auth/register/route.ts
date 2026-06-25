@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { z } from "zod";
-import { repo, AppUser } from "@/infra/db";
+import { repo, AppUser, UserRole } from "@/infra/db";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +35,7 @@ export async function POST(req: Request): Promise<Response> {
     email,
     passwordHash,
     name: name && name.trim() ? name.trim() : email.split("@")[0],
+    role: UserRole.USER,
     notifyNew: true,
     notifyAvailable: false,
     notifyWaitroom: false,

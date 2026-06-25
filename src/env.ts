@@ -25,6 +25,8 @@ const schema = z.object({
   RESEND_API_KEY: z.string().optional().default(""),
   EMAIL_FROM: z.string().default("Cupet Watcher <alerts@example.com>"),
   AUTH_SECRET: z.string().optional().default("dev-secret-change-me"),
+  ADMIN_EMAIL: z.string().optional().default(""),
+  ADMIN_PASSWORD: z.string().optional().default(""),
   ENCRYPTION_KEY: z.string().optional().default(""),
   SCRAPE_PAGE_DELAY_MS_MIN: z.coerce.number().default(3500),
   SCRAPE_PAGE_DELAY_MS_MAX: z.coerce.number().default(7000),

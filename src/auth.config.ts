@@ -1,4 +1,5 @@
 import type { NextAuthConfig } from "next-auth";
+import type { UserRole } from "@/infra/db/entities/enums";
 
 const THIRTY_DAYS_S = 30 * 24 * 60 * 60;
 
@@ -17,6 +18,7 @@ export const authConfig = {
     jwt({ token, user }) {
       if (user?.id) token.id = user.id;
       if (user?.email) token.email = user.email;
+      if (user?.role) token.role = user.role;
       return token;
     },
     session({ session, token }) {
@@ -25,6 +27,9 @@ export const authConfig = {
       }
       if (token.email && session.user) {
         session.user.email = token.email as string;
+      }
+      if (token.role && session.user) {
+        session.user.role = token.role as UserRole;
       }
       return session;
     },

@@ -3,7 +3,8 @@ import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { z } from "zod";
 import { authConfig } from "@/auth.config";
-import { repo, AppUser } from "@/infra/db";
+import { repo, AppUser, UserRole } from "@/infra/db";
+import { logAuthAttempt } from "@/lib/auth-attempts";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -30,12 +31,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const userRepo = await repo(AppUser);
         const user = await userRepo.findOne({ where: { email } });
-        if (!user) return null;
+        if (!user) {
+          await logAuthAttempt({ email, success: false, reason: "user_not_found" });
+          return null;
+        }
 
         const ok = await compare(password, user.passwordHash);
-        if (!ok) return null;
+        if (!ok) {
+          await logAuthAttempt({ email, success: false, reason: "invalid_password" });
+          return null;
+        }
 
-        return { id: user.id, email: user.email, name: user.name ?? undefined };
+        await logAuthAttempt({ email, success: true });
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name ?? undefined,
+          role: user.role ?? UserRole.USER,
+        };
       },
     }),
   ],

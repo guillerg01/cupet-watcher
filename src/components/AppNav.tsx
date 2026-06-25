@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { signOut } from "@/auth";
+import { auth, signOut } from "@/auth";
+import { isAdminRole } from "@/lib/admin";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Inicio" },
@@ -10,27 +11,41 @@ const NAV_LINKS = [
   { href: "/settings", label: "Ajustes" },
 ];
 
-export default function AppNav(): React.JSX.Element {
+export default async function AppNav(): Promise<React.JSX.Element> {
+  const session = await auth();
+  const admin = isAdminRole(session?.user?.role);
+
   return (
     <nav
       className="w-full px-4 py-3 flex items-center justify-between"
       style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}
     >
-      <Link href="/dashboard" className="font-bold text-lg" style={{ color: "var(--brand)" }}>
+      <Link href={admin ? "/admin" : "/dashboard"} className="font-bold text-lg" style={{ color: "var(--brand)" }}>
         Cupet Watcher
       </Link>
 
       <div className="flex items-center gap-1 overflow-x-auto">
-        {NAV_LINKS.map((l) => (
+        {admin && (
           <Link
-            key={l.href}
-            href={l.href}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors hover:bg-white/10"
-            style={{ color: "var(--text-muted)" }}
+            href="/admin"
+            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            style={{ background: "var(--brand)", color: "#0f172a" }}
           >
-            {l.label}
+            Admin
           </Link>
-        ))}
+        )}
+
+        {!admin &&
+          NAV_LINKS.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors hover:bg-white/10"
+              style={{ color: "var(--text-muted)" }}
+            >
+              {l.label}
+            </Link>
+          ))}
 
         <form
           action={async () => {

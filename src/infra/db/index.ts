@@ -15,9 +15,11 @@ import { Notification } from "./entities/notification.entity";
 import { PredictionCache } from "./entities/prediction-cache.entity";
 import { Device } from "./entities/device.entity";
 import { Assignment } from "./entities/assignment.entity";
+import { AuthAttempt } from "./entities/auth-attempt.entity";
 
 export {
   AppUser,
+  AuthAttempt,
   XutilLink,
   ScraperCredential,
   Province,
