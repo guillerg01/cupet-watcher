@@ -1,6 +1,5 @@
-import { prisma } from "@/infra/db/prisma";
+import { db, repo, PredictionCache } from "@/infra/db";
 import { scoreSamples, type PredictSample } from "@/core/prediction/predict";
-import type { Prisma } from "@prisma/client";
 
 interface RawSampleRow {
   stationid: number;
@@ -14,9 +13,10 @@ interface RawSampleRow {
 
 export async function runComputePrediction(): Promise<{ buckets: number }> {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const dataSource = await db();
 
-  // Pull samples from last 30 days with dow/hour extracted in Postgres
-  const rows = await prisma.$queryRaw<RawSampleRow[]>`
+  const rows = await dataSource.query<RawSampleRow[]>(
+    `
     SELECT
       ss."stationId"       AS stationid,
       s."provinceId"       AS provinceid,
@@ -27,10 +27,11 @@ export async function runComputePrediction(): Promise<{ buckets: number }> {
       ss."disponibilidades" AS disponibilidades
     FROM "StationSnapshot" ss
     JOIN "Station" s ON s.id = ss."stationId"
-    WHERE ss.ts >= ${cutoff}
-  `;
+    WHERE ss.ts >= $1
+    `,
+    [cutoff],
+  );
 
-  // Group samples by scope
   const stationSamples = new Map<string, PredictSample[]>();
   const provinceSamples = new Map<string, PredictSample[]>();
 
@@ -57,6 +58,7 @@ export async function runComputePrediction(): Promise<{ buckets: number }> {
 
   let buckets = 0;
   const now = new Date();
+  const cacheRepo = await repo(PredictionCache);
 
   async function upsertBuckets(
     scope: string,
@@ -64,9 +66,8 @@ export async function runComputePrediction(): Promise<{ buckets: number }> {
   ): Promise<void> {
     const scored = scoreSamples(samples);
     for (const b of scored) {
-      await prisma.predictionCache.upsert({
-        where: { scope_dow_hour: { scope, dow: b.dow, hour: b.hour } },
-        create: {
+      await cacheRepo.upsert(
+        {
           scope,
           dow: b.dow,
           hour: b.hour,
@@ -76,14 +77,8 @@ export async function runComputePrediction(): Promise<{ buckets: number }> {
           score: b.score,
           computedAt: now,
         },
-        update: {
-          avgFill: b.avgFill,
-          avgAvail: b.avgAvail,
-          samples: b.samples,
-          score: b.score,
-          computedAt: now,
-        },
-      });
+        ["scope", "dow", "hour"],
+      );
       buckets++;
     }
   }
@@ -92,7 +87,7 @@ export async function runComputePrediction(): Promise<{ buckets: number }> {
     try {
       await upsertBuckets(scope, samples);
     } catch (err) {
-      console.error(`[compute-prediction] Failed scope ${scope}:`, err);
+      process.stderr.write(`[compute-prediction] Failed scope ${scope}: ${String(err)}\n`);
     }
   }
 
@@ -100,10 +95,9 @@ export async function runComputePrediction(): Promise<{ buckets: number }> {
     try {
       await upsertBuckets(scope, samples);
     } catch (err) {
-      console.error(`[compute-prediction] Failed scope ${scope}:`, err);
+      process.stderr.write(`[compute-prediction] Failed scope ${scope}: ${String(err)}\n`);
     }
   }
 
-  console.log(`[compute-prediction] Upserted ${buckets} prediction buckets`);
   return { buckets };
 }

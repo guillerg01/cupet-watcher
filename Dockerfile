@@ -6,21 +6,18 @@ WORKDIR /app
 # --- Dependencies ---
 FROM base AS deps
 COPY package.json package-lock.json* ./
-COPY prisma ./prisma
 RUN npm ci
 
 # --- Builder ---
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate
 RUN npm run build
 
 # --- Worker (standalone cron runner) ---
 FROM base AS worker
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY . .
 RUN chmod +x ./scripts/start-worker.sh
 CMD ["sh", "./scripts/start-worker.sh"]
@@ -29,7 +26,6 @@ CMD ["sh", "./scripts/start-worker.sh"]
 FROM base AS web
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/.next ./.next
 COPY . .
 RUN chmod +x ./scripts/start-web.sh

@@ -1,7 +1,10 @@
-import { auth } from "@/auth";
+import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
+import { authConfig } from "@/auth.config";
 
-const PROTECTED = ["/dashboard", "/onboarding", "/stations", "/analytics", "/settings", "/predict"];
+const PROTECTED = ["/dashboard", "/onboarding", "/settings", "/queues"];
+
+const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const { nextUrl, auth: session } = req;

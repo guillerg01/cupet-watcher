@@ -1,4 +1,4 @@
-import { prisma } from "@/infra/db/prisma";
+import { repo, Station, StationSnapshot } from "@/infra/db";
 import { createXutilClient } from "@/infra/xutil/client";
 import { getScraperToken } from "@/infra/xutil/token-store";
 import { sleep, jitter } from "@/lib/sleep";
@@ -10,36 +10,35 @@ export async function runScrapeAvailability(): Promise<{ sampled: number }> {
   const token = await getScraperToken();
   const client = createXutilClient();
 
-  const stations = await prisma.station.findMany({
+  const stationRepo = await repo(Station);
+  const stations = await stationRepo.find({
     where: { active: true },
-    orderBy: { lastSeenAt: "desc" },
+    order: { lastSeenAt: "DESC" },
     take: STATION_CAP,
     select: { id: true },
   });
 
+  const snapshotRepo = await repo(StationSnapshot);
   let sampled = 0;
 
   for (const station of stations) {
     try {
       const detail = await client.getServicioDetail(token, station.id);
 
-      await prisma.stationSnapshot.create({
-        data: {
-          stationId: station.id,
-          disponible: detail.disponible,
-          disponibilidades: detail.disponibilidades,
-          views: detail.views,
-          rating: null, // detail shape has no rating field
-          queuePosicion: null,
-          queueTotal: null,
-        },
+      await snapshotRepo.save({
+        stationId: station.id,
+        disponible: detail.disponible,
+        disponibilidades: detail.disponibilidades,
+        views: detail.views,
+        rating: null,
+        queuePosicion: null,
+        queueTotal: null,
       });
 
       sampled++;
     } catch (err) {
-      console.error(
-        `[scrape-availability] Failed for station ${station.id}:`,
-        err,
+      process.stderr.write(
+        `[scrape-availability] Failed for station ${station.id}: ${String(err)}\n`,
       );
     }
 
@@ -51,6 +50,5 @@ export async function runScrapeAvailability(): Promise<{ sampled: number }> {
     );
   }
 
-  console.log(`[scrape-availability] Sampled ${sampled}/${stations.length}`);
   return { sampled };
 }

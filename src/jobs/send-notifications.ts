@@ -1,71 +1,76 @@
-import { prisma } from "@/infra/db/prisma";
+import {
+  repo,
+  AppUser,
+  DetectionEvent,
+  Notification,
+  NotificationChannel,
+  NotificationStatus,
+  DetectionType,
+} from "@/infra/db";
 import { sendNewCupetEmail } from "@/infra/email/resend";
-import type { DetectionType } from "@/core/detection/types";
-
-const PREF_KEY: Record<DetectionType, "notifyNew" | "notifyAvailable" | "notifyWaitroom"> = {
-  NEW: "notifyNew",
-  BECAME_AVAILABLE: "notifyAvailable",
-  WAITROOM_ENABLED: "notifyWaitroom",
-};
 
 function buildPublicLink(stationId: number): string {
   return `https://ticket.xutil.net/store/service-detail?service=${stationId}`;
 }
 
+const PREF_BY_TYPE: Record<
+  DetectionType,
+  "notifyNew" | "notifyAvailable" | "notifyWaitroom"
+> = {
+  [DetectionType.NEW]: "notifyNew",
+  [DetectionType.BECAME_AVAILABLE]: "notifyAvailable",
+  [DetectionType.WAITROOM_ENABLED]: "notifyWaitroom",
+};
+
 export async function runSendNotifications(): Promise<{
   sent: number;
   failed: number;
+  events: number;
 }> {
-  const events = await prisma.detectionEvent.findMany({
+  const eventRepo = await repo(DetectionEvent);
+  const events = await eventRepo.find({
     where: { notified: false },
-    include: {
-      station: {
-        select: {
-          name: true,
-          establishment: true,
-          municipio: true,
-        },
-      },
-      province: {
-        select: { name: true },
-      },
+    relations: {
+      station: true,
+      province: true,
     },
   });
 
   let sent = 0;
   let failed = 0;
+  const userRepo = await repo(AppUser);
+  const notificationRepo = await repo(Notification);
 
   for (const event of events) {
-    const prefKey = PREF_KEY[event.type as DetectionType];
+    const prefKey = PREF_BY_TYPE[event.type];
 
-    // Find subscribed users in this province with the matching pref on
-    const subscribers = await prisma.appUser.findMany({
-      where: {
-        provinces: {
-          some: { provinceId: event.provinceId },
-        },
-        [prefKey]: true,
-      },
-      select: {
-        id: true,
-        email: true,
-      },
-    });
+    const subscribers = await userRepo
+      .createQueryBuilder("u")
+      .innerJoin("u.provinces", "up")
+      .where("up.provinceId = :provinceId", { provinceId: event.provinceId })
+      .andWhere(`u.${prefKey} = true`)
+      .select(["u.id", "u.email"])
+      .getMany();
 
     for (const user of subscribers) {
-      // Upsert notification row (idempotent)
-      const notification = await prisma.notification.upsert({
-        where: { userId_eventId: { userId: user.id, eventId: event.id } },
-        create: {
+      const notification = await notificationRepo.upsert(
+        {
           userId: user.id,
           eventId: event.id,
-          channel: "EMAIL",
-          status: "PENDING",
+          channel: NotificationChannel.EMAIL,
+          status: NotificationStatus.PENDING,
         },
-        update: {
-          status: "PENDING",
-        },
-      });
+        ["userId", "eventId"],
+      );
+
+      const notificationId = notification.identifiers[0]?.id as string | undefined;
+      const resolvedId =
+        notificationId ??
+        (
+          await notificationRepo.findOne({
+            where: { userId: user.id, eventId: event.id },
+          })
+        )?.id;
 
       const result = await sendNewCupetEmail(user.email, {
         stationName: event.station.name,
@@ -76,46 +81,29 @@ export async function runSendNotifications(): Promise<{
         publicLink: buildPublicLink(event.stationId),
       });
 
-      try {
-        if (result.ok) {
-          await prisma.notification.update({
-            where: { id: notification.id },
-            data: { status: "SENT", sentAt: new Date(), error: null },
-          });
-          sent++;
-        } else {
-          await prisma.notification.update({
-            where: { id: notification.id },
-            data: {
-              status: "FAILED",
-              error: result.error ?? "unknown error",
-            },
-          });
-          failed++;
-        }
-      } catch (err) {
-        console.error(
-          `[send-notifications] DB update failed for notification ${notification.id}:`,
-          err,
-        );
+      if (!resolvedId) {
+        failed++;
+        continue;
+      }
+
+      if (result.ok) {
+        await notificationRepo.update(resolvedId, {
+          status: NotificationStatus.SENT,
+          sentAt: new Date(),
+          error: null,
+        });
+        sent++;
+      } else {
+        await notificationRepo.update(resolvedId, {
+          status: NotificationStatus.FAILED,
+          error: result.error ?? "unknown error",
+        });
         failed++;
       }
     }
 
-    // Mark event as notified after all recipients processed
-    try {
-      await prisma.detectionEvent.update({
-        where: { id: event.id },
-        data: { notified: true },
-      });
-    } catch (err) {
-      console.error(
-        `[send-notifications] Failed to mark event ${event.id} notified:`,
-        err,
-      );
-    }
+    await eventRepo.update(event.id, { notified: true });
   }
 
-  console.log(`[send-notifications] sent=${sent} failed=${failed}`);
-  return { sent, failed };
+  return { sent, failed, events: events.length };
 }

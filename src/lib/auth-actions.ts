@@ -1,59 +1,25 @@
 "use server";
 
-import { hash } from "bcryptjs";
 import { z } from "zod";
-import { prisma } from "@/infra/db/prisma";
-import { signIn } from "@/auth";
+import { hash } from "bcryptjs";
+import { repo, AppUser, UserProvince } from "@/infra/db";
+import { signIn, auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
-
-const registerSchema = z.object({
-  email: z.string().email("Email inválido"),
-  name: z.string().min(2, "Nombre demasiado corto"),
-  password: z.string().min(6, "Mínimo 6 caracteres"),
-});
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
   password: z.string().min(1, "Contraseña requerida"),
 });
 
+const registerSchema = z.object({
+  email: z.string().email("Email inválido"),
+  password: z.string().min(6, "Mínimo 6 caracteres"),
+  name: z.string().optional(),
+});
+
 export interface ActionResult {
   error?: string;
-}
-
-export async function registerAction(_prevState: ActionResult, formData: FormData): Promise<ActionResult> {
-  const raw = {
-    email: formData.get("email"),
-    name: formData.get("name"),
-    password: formData.get("password"),
-  };
-
-  const parsed = registerSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { error: parsed.error.errors[0].message };
-  }
-
-  const { email, name, password } = parsed.data;
-
-  const existing = await prisma.appUser.findUnique({ where: { email } });
-  if (existing) {
-    return { error: "Ya existe una cuenta con ese email" };
-  }
-
-  const passwordHash = await hash(password, 12);
-  await prisma.appUser.create({
-    data: {
-      email,
-      name,
-      passwordHash,
-      notifyNew: false,
-      notifyAvailable: false,
-      notifyWaitroom: false,
-    },
-  });
-
-  redirect("/login?registered=1");
 }
 
 export async function loginAction(_prevState: ActionResult, formData: FormData): Promise<ActionResult> {
@@ -68,17 +34,78 @@ export async function loginAction(_prevState: ActionResult, formData: FormData):
   }
 
   try {
-    await signIn("credentials", {
+    const result = await signIn("credentials", {
       email: parsed.data.email,
       password: parsed.data.password,
-      redirectTo: "/dashboard",
+      redirect: false,
     });
+
+    if (result?.error) {
+      return { error: "Email o contraseña incorrectos" };
+    }
   } catch (err) {
     if (err instanceof AuthError) {
-      return { error: "Credenciales incorrectas" };
+      return { error: "Email o contraseña incorrectos" };
     }
     throw err;
   }
 
-  return {};
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { error: "No se pudo iniciar sesión" };
+  }
+
+  const userProvinceRepo = await repo(UserProvince);
+  const provinceCount = await userProvinceRepo.count({
+    where: { userId: session.user.id },
+  });
+
+  redirect(provinceCount > 0 ? "/dashboard" : "/onboarding");
+}
+
+export async function registerAction(
+  _prevState: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const parsed = registerSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+    name: formData.get("name") ?? undefined,
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.errors[0].message };
+  }
+
+  const { email, password, name } = parsed.data;
+  const userRepo = await repo(AppUser);
+
+  const existing = await userRepo.findOne({ where: { email } });
+  if (existing) {
+    return { error: "Ese email ya está registrado" };
+  }
+
+  const passwordHash = await hash(password, 12);
+  await userRepo.save({
+    email,
+    passwordHash,
+    name: name && name.trim() ? name.trim() : email.split("@")[0],
+    notifyNew: true,
+    notifyAvailable: false,
+    notifyWaitroom: false,
+  });
+
+  try {
+    const result = await signIn("credentials", { email, password, redirect: false });
+    if (result?.error) {
+      return { error: "Cuenta creada, pero falló el inicio de sesión. Probá entrar." };
+    }
+  } catch (err) {
+    if (err instanceof AuthError) {
+      return { error: "Cuenta creada, pero falló el inicio de sesión. Probá entrar." };
+    }
+    throw err;
+  }
+
+  redirect("/onboarding");
 }

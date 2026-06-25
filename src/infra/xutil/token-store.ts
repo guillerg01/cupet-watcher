@@ -1,10 +1,10 @@
-import { prisma } from "@/infra/db/prisma";
+import { repo, ScraperCredential } from "@/infra/db";
 import { createXutilClient } from "@/infra/xutil/client";
+import { xutilLog } from "@/infra/xutil/log";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { env } from "@/env";
 
 const SCRAPER_ROW_ID = 1;
-/** Refresh when fewer than 7 days remain. */
 const REFRESH_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
 
 export async function getScraperToken(): Promise<string> {
@@ -14,17 +14,18 @@ export async function getScraperToken(): Promise<string> {
     );
   }
 
-  const row = await prisma.scraperCredential.findUnique({
-    where: { id: SCRAPER_ROW_ID },
-  });
+  const credRepo = await repo(ScraperCredential);
+  const row = await credRepo.findOne({ where: { id: SCRAPER_ROW_ID } });
 
   const now = Date.now();
   const needsRefresh =
     !row || row.tokenExp.getTime() - now < REFRESH_THRESHOLD_MS;
 
   if (needsRefresh) {
-    console.log("[token-store] Refreshing scraper token via login…");
-
+    xutilLog("token-store refreshing scraper token", {
+      user: env.XUTIL_SCRAPER_USER,
+      hadCached: Boolean(row),
+    });
     const client = createXutilClient();
     const bundle = await client.login(
       env.XUTIL_SCRAPER_USER,
@@ -33,25 +34,24 @@ export async function getScraperToken(): Promise<string> {
 
     const encryptedToken = encrypt(bundle.accessToken);
 
-    await prisma.scraperCredential.upsert({
-      where: { id: SCRAPER_ROW_ID },
-      create: {
+    await credRepo.upsert(
+      {
         id: SCRAPER_ROW_ID,
         username: env.XUTIL_SCRAPER_USER,
         encryptedToken,
         tokenExp: bundle.expiresAt,
         refreshToken: bundle.refreshToken,
       },
-      update: {
-        username: env.XUTIL_SCRAPER_USER,
-        encryptedToken,
-        tokenExp: bundle.expiresAt,
-        refreshToken: bundle.refreshToken,
-      },
-    });
+      ["id"],
+    );
 
     return bundle.accessToken;
   }
 
-  return decrypt(row.encryptedToken);
+  xutilLog("token-store using cached scraper token", {
+    user: env.XUTIL_SCRAPER_USER,
+    exp: row!.tokenExp.toISOString(),
+  });
+
+  return decrypt(row!.encryptedToken);
 }

@@ -1,14 +1,15 @@
 "use server";
 
 import { auth } from "@/auth";
-import { prisma } from "@/infra/db/prisma";
+import { db, repo, AppUser, UserProvince } from "@/infra/db";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
 const schema = z.object({
   provinceIds: z.union([z.string(), z.array(z.string())]).transform((v) =>
-    (Array.isArray(v) ? v : [v]).map(Number).filter((n) => !isNaN(n))
+    (Array.isArray(v) ? v : [v]).map(Number).filter((n) => !isNaN(n)),
   ),
+  notifyNew: z.coerce.boolean().default(false),
 });
 
 export async function saveProvincesAction(formData: FormData): Promise<void> {
@@ -16,23 +17,28 @@ export async function saveProvincesAction(formData: FormData): Promise<void> {
   if (!session?.user?.id) redirect("/login");
 
   const userId = session.user.id;
-  const raw = { provinceIds: formData.getAll("provinceIds") };
+  const raw = {
+    provinceIds: formData.getAll("provinceIds"),
+    notifyNew: formData.get("notifyNew") === "on",
+  };
   const parsed = schema.safeParse(raw);
   if (!parsed.success) redirect("/onboarding");
 
-  const { provinceIds } = parsed.data;
+  const { provinceIds, notifyNew } = parsed.data;
+  const ds = await db();
 
-  await prisma.$transaction([
-    prisma.userProvince.deleteMany({ where: { userId } }),
-    ...(provinceIds.length > 0
-      ? [
-          prisma.userProvince.createMany({
-            data: provinceIds.map((provinceId) => ({ userId, provinceId })),
-            skipDuplicates: true,
-          }),
-        ]
-      : []),
-  ]);
+  await ds.transaction(async (manager) => {
+    await manager.delete(UserProvince, { userId });
+
+    if (provinceIds.length > 0) {
+      await manager.insert(
+        UserProvince,
+        provinceIds.map((provinceId) => ({ userId, provinceId })),
+      );
+    }
+
+    await manager.getRepository(AppUser).update(userId, { notifyNew });
+  });
 
   redirect("/dashboard");
 }

@@ -1,10 +1,12 @@
+import "@/load-env";
 import { runScrapeCatalog } from "@/jobs/scrape-catalog";
 import { runScrapeAvailability } from "@/jobs/scrape-availability";
 import { runIngestUserQueues } from "@/jobs/ingest-user-queues";
 import { runSendNotifications } from "@/jobs/send-notifications";
 import { runComputePrediction } from "@/jobs/compute-prediction";
+import { runSyncProvinces } from "@/jobs/sync-provinces";
 
-type JobName = "catalog" | "availability" | "queues" | "notify" | "predict";
+type JobName = "catalog" | "availability" | "queues" | "notify" | "predict" | "provinces";
 
 const JOBS: Record<JobName, () => Promise<unknown>> = {
   catalog: runScrapeCatalog,
@@ -12,9 +14,10 @@ const JOBS: Record<JobName, () => Promise<unknown>> = {
   queues: runIngestUserQueues,
   notify: runSendNotifications,
   predict: runComputePrediction,
+  provinces: runSyncProvinces,
 };
 
-const VALID: JobName[] = ["catalog", "availability", "queues", "notify", "predict"];
+const VALID: JobName[] = ["catalog", "availability", "queues", "notify", "predict", "provinces"];
 
 async function main(): Promise<void> {
   const arg = (process.argv[2] ?? "catalog") as JobName;

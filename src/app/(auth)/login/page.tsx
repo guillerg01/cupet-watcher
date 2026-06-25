@@ -16,12 +16,11 @@ export default function LoginPage(): React.JSX.Element {
         style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}
       >
         <div className="text-center">
-          <div className="text-3xl mb-2">⛽</div>
           <h1 className="text-xl font-bold" style={{ color: "var(--text)" }}>
             Iniciar sesión
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            Cupet Watcher
+            Entrá con tu cuenta de Cupet Watcher
           </p>
         </div>
 
@@ -79,7 +78,7 @@ export default function LoginPage(): React.JSX.Element {
         <p className="text-center text-sm" style={{ color: "var(--text-muted)" }}>
           ¿No tenés cuenta?{" "}
           <Link href="/register" style={{ color: "var(--brand)" }}>
-            Registrate
+            Crear una
           </Link>
         </p>
       </div>

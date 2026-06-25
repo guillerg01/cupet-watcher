@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
-echo "[worker] Running prisma db push..."
-npx prisma db push --skip-generate
-echo "[worker] Running seed..."
-npx tsx prisma/seed.ts || true
+echo "[worker] Syncing database schema..."
+npx tsx scripts/sync-db.ts
+echo "[worker] Seeding province catalog (xutil IDs)..."
+npx tsx scripts/seed.ts || true
 echo "[worker] Starting cron worker..."
 exec npx tsx worker.ts

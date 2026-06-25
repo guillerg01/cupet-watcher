@@ -1,0 +1,195 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { Not, In } from "typeorm";
+import {
+  db,
+  repo,
+  Province,
+  Station,
+  StationSnapshot,
+  DetectionEvent,
+  Assignment,
+  AssignmentStatus,
+  DetectionType,
+} from "@/infra/db";
+import { deviceFromRequest } from "@/lib/device-auth";
+import { detect } from "@/core/detection/detect";
+import type { PriorStationState } from "@/core/detection/types";
+import type { FuelStation } from "@/core/station/types";
+
+export const dynamic = "force-dynamic";
+
+const stationSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  establishment: z.string(),
+  provinceName: z.string(),
+  municipio: z.string().nullable().optional(),
+  admiteSalaEspera: z.boolean(),
+  tieneValidacion: z.boolean(),
+  disponibilidades: z.number().int().min(0),
+  rating: z.number().nullable().optional(),
+  views: z.number().int().nullable().optional(),
+});
+
+const schema = z.object({
+  assignmentId: z.string().optional(),
+  // true when the phone swept the whole catalog (safe to deactivate unseen stations)
+  complete: z.boolean().default(false),
+  provinces: z.array(z.object({ id: z.number().int(), name: z.string() })).optional(),
+  stations: z.array(stationSchema).max(5000),
+});
+
+/**
+ * Catalog ingest — the heart of "is there a new cupet?".
+ * Port of jobs/scrape-catalog.ts, fed by the phone (Cuban IP) instead of the server.
+ * Upserts fuel stations, runs the pure detect() diff, emits DetectionEvents.
+ */
+export async function POST(req: Request): Promise<Response> {
+  const auth = deviceFromRequest(req);
+  if (!auth) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json().catch(() => null);
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "invalid_body", detail: parsed.error.flatten() },
+      { status: 400 },
+    );
+  }
+
+  const { assignmentId, complete, provinces, stations } = parsed.data;
+  const current: FuelStation[] = stations.map((s) => ({
+    id: s.id,
+    name: s.name,
+    establishment: s.establishment,
+    provinceName: s.provinceName,
+    municipio: s.municipio ?? null,
+    admiteSalaEspera: s.admiteSalaEspera,
+    tieneValidacion: s.tieneValidacion,
+    disponibilidades: s.disponibilidades,
+    rating: s.rating ?? null,
+    views: s.views ?? null,
+  }));
+
+  const provinceRepo = await repo(Province);
+
+  // Phone may send the province catalog so IDs resolve even before a seed runs.
+  if (provinces && provinces.length > 0) {
+    for (const p of provinces) {
+      await provinceRepo.upsert({ id: p.id, name: p.name.trim() }, ["id"]);
+    }
+  }
+
+  const allProvinces = await provinceRepo.find();
+  const provinceMap = new Map<string, number>(
+    allProvinces.map((p) => [p.name.trim().toUpperCase(), p.id]),
+  );
+
+  const stationRepo = await repo(Station);
+  const existingStations = await stationRepo.find({
+    select: { id: true, admiteSalaEspera: true, disponibilidades: true },
+  });
+  const prior = new Map<number, PriorStationState>(
+    existingStations.map((s) => [
+      s.id,
+      { id: s.id, admiteSalaEspera: s.admiteSalaEspera, disponibilidades: s.disponibilidades },
+    ]),
+  );
+
+  const eventDrafts = detect({ prior, current });
+
+  const seenIds = new Set<number>();
+  const now = new Date();
+  const dataSource = await db();
+  const BATCH = 50;
+
+  for (let i = 0; i < current.length; i += BATCH) {
+    const batch = current.slice(i, i + BATCH);
+    await dataSource.transaction(async (manager) => {
+      const txStationRepo = manager.getRepository(Station);
+      for (const station of batch) {
+        const provinceId = provinceMap.get(station.provinceName.trim().toUpperCase());
+        if (provinceId === undefined) continue;
+        seenIds.add(station.id);
+
+        const existing = await txStationRepo.findOne({ where: { id: station.id } });
+        const common = {
+          name: station.name,
+          establishment: station.establishment,
+          provinceId,
+          municipio: station.municipio,
+          admiteSalaEspera: station.admiteSalaEspera,
+          tieneValidacion: station.tieneValidacion,
+          disponibilidades: station.disponibilidades,
+          active: true,
+          lastSeenAt: now,
+        };
+        if (existing) {
+          await txStationRepo.update(station.id, common);
+        } else {
+          await txStationRepo.save({ id: station.id, ...common, firstSeenAt: now });
+        }
+      }
+    });
+  }
+
+  // Only deactivate unseen stations when the phone reports a COMPLETE sweep —
+  // a partial sweep must not wipe the active set.
+  if (complete && seenIds.size > 0) {
+    await stationRepo.update(
+      { id: Not(In(Array.from(seenIds))), active: true },
+      { active: false },
+    );
+  }
+
+  // Lightweight availability snapshots from the catalog data.
+  const snapshotRepo = await repo(StationSnapshot);
+  for (const s of current) {
+    if (!seenIds.has(s.id)) continue;
+    await snapshotRepo.save({
+      stationId: s.id,
+      disponible: s.disponibilidades > 0,
+      disponibilidades: s.disponibilidades,
+      views: s.views,
+      rating: s.rating,
+      queuePosicion: null,
+      queueTotal: null,
+    });
+  }
+
+  const eventRepo = await repo(DetectionEvent);
+  let newEvents = 0;
+  for (const draft of eventDrafts) {
+    const provinceId = provinceMap.get(draft.provinceName.trim().toUpperCase());
+    if (provinceId === undefined) continue;
+    try {
+      await eventRepo.save({
+        stationId: draft.stationId,
+        provinceId,
+        type: draft.type as DetectionType,
+        notified: false,
+      });
+      newEvents++;
+    } catch {
+      // duplicate / constraint — ignore
+    }
+  }
+
+  if (assignmentId) {
+    const assignmentRepo = await repo(Assignment);
+    await assignmentRepo.update(
+      { id: assignmentId, deviceId: auth.deviceId },
+      { status: AssignmentStatus.DONE, completedAt: now },
+    );
+  }
+
+  return NextResponse.json({
+    stations: current.length,
+    seen: seenIds.size,
+    newEvents,
+    complete,
+  });
+}

@@ -3,7 +3,8 @@ import { signOut } from "@/auth";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Inicio" },
-  { href: "/stations", label: "Estaciones" },
+  { href: "/queues", label: "Mis colas" },
+  { href: "/catalog", label: "Catálogo" },
   { href: "/analytics", label: "Analíticas" },
   { href: "/predict", label: "Mejor hora" },
   { href: "/settings", label: "Ajustes" },
@@ -16,7 +17,7 @@ export default function AppNav(): React.JSX.Element {
       style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}
     >
       <Link href="/dashboard" className="font-bold text-lg" style={{ color: "var(--brand)" }}>
-        ⛽ Cupet
+        Cupet Watcher
       </Link>
 
       <div className="flex items-center gap-1 overflow-x-auto">

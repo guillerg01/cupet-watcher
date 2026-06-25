@@ -16,31 +16,25 @@ export default function RegisterPage(): React.JSX.Element {
         style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}
       >
         <div className="text-center">
-          <div className="text-3xl mb-2">⛽</div>
           <h1 className="text-xl font-bold" style={{ color: "var(--text)" }}>
             Crear cuenta
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-            Cupet Watcher — Gratis
+            Cuenta de Cupet Watcher para recibir alertas
           </p>
         </div>
 
         <form action={action} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1" style={{ color: "var(--text)" }}>
-              Nombre
+              Nombre <span style={{ color: "var(--text-muted)" }}>(opcional)</span>
             </label>
             <input
               type="text"
               name="name"
-              required
               autoComplete="name"
               className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2"
-              style={{
-                background: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-              }}
+              style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }}
             />
           </div>
 
@@ -54,11 +48,7 @@ export default function RegisterPage(): React.JSX.Element {
               required
               autoComplete="email"
               className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2"
-              style={{
-                background: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-              }}
+              style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }}
             />
           </div>
 
@@ -70,23 +60,14 @@ export default function RegisterPage(): React.JSX.Element {
               type="password"
               name="password"
               required
-              autoComplete="new-password"
               minLength={6}
+              autoComplete="new-password"
               className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2"
-              style={{
-                background: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-              }}
+              style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }}
             />
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              Mínimo 6 caracteres
-            </p>
           </div>
 
-          {state?.error && (
-            <p className="text-sm text-red-400">{state.error}</p>
-          )}
+          {state?.error && <p className="text-sm text-red-400">{state.error}</p>}
 
           <button
             type="submit"
@@ -94,14 +75,14 @@ export default function RegisterPage(): React.JSX.Element {
             className="w-full py-2.5 rounded-lg font-semibold text-sm transition-all disabled:opacity-60"
             style={{ background: "var(--brand)", color: "#0f172a" }}
           >
-            {pending ? "Creando cuenta..." : "Crear cuenta"}
+            {pending ? "Creando..." : "Crear cuenta"}
           </button>
         </form>
 
         <p className="text-center text-sm" style={{ color: "var(--text-muted)" }}>
           ¿Ya tenés cuenta?{" "}
           <Link href="/login" style={{ color: "var(--brand)" }}>
-            Iniciá sesión
+            Iniciar sesión
           </Link>
         </p>
       </div>

@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { prisma } from "@/infra/db/prisma";
+import { In } from "typeorm";
+import { db, repo, UserProvince, DetectionEvent, Station } from "@/infra/db";
 import StatCard from "@/components/StatCard";
 import StationCard from "@/components/StationCard";
 import EmptyState from "@/components/EmptyState";
@@ -20,8 +21,8 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
   if (!session?.user?.id) redirect("/login");
 
   const userId = session.user.id;
-
-  const userProvinces = await prisma.userProvince.findMany({
+  const userProvinceRepo = await repo(UserProvince);
+  const userProvinces = await userProvinceRepo.find({
     where: { userId },
     select: { provinceId: true },
   });
@@ -47,9 +48,10 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
     );
   }
 
+  const dataSource = await db();
   const [availableStations, recentEvents, totalStations] = await Promise.all([
-    // Get stations with latest snapshot disponibilidades > 0
-    prisma.$queryRaw<StationWithLatest[]>`
+    dataSource.query<StationWithLatest[]>(
+      `
       SELECT DISTINCT ON (s.id)
         s.id,
         s.name,
@@ -59,20 +61,28 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
         snap."disponibilidades"
       FROM "Station" s
       JOIN "StationSnapshot" snap ON snap."stationId" = s.id
-      WHERE s."provinceId" = ANY(${provinceIds}::int[])
+      WHERE s."provinceId" = ANY($1::int[])
         AND s.active = true
         AND snap."disponibilidades" > 0
       ORDER BY s.id, snap.ts DESC
-    `,
-    prisma.detectionEvent.findMany({
-      where: { provinceId: { in: provinceIds } },
-      orderBy: { detectedAt: "desc" },
-      take: 10,
-      include: { station: true, province: true },
-    }),
-    prisma.station.count({
-      where: { provinceId: { in: provinceIds }, active: true },
-    }),
+      `,
+      [provinceIds],
+    ),
+    (async () => {
+      const eventRepo = await repo(DetectionEvent);
+      return eventRepo.find({
+        where: { provinceId: In(provinceIds) },
+        order: { detectedAt: "DESC" },
+        take: 10,
+        relations: { station: true, province: true },
+      });
+    })(),
+    (async () => {
+      const stationRepo = await repo(Station);
+      return stationRepo.count({
+        where: { provinceId: In(provinceIds), active: true },
+      });
+    })(),
   ]);
 
   const availCount = availableStations.length;
@@ -88,14 +98,12 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
         </p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatCard label="Disponibles ahora" value={availCount} accent={availCount > 0} />
         <StatCard label="Estaciones activas" value={totalStations} />
         <StatCard label="Eventos recientes" value={recentEvents.length} sub="últimas detecciones" />
       </div>
 
-      {/* Available stations */}
       <section>
         <h2 className="text-base font-semibold mb-3" style={{ color: "var(--text)" }}>
           Estaciones con disponibilidad
@@ -123,7 +131,6 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
         )}
       </section>
 
-      {/* Recent events */}
       {recentEvents.length > 0 && (
         <section>
           <h2 className="text-base font-semibold mb-3" style={{ color: "var(--text)" }}>

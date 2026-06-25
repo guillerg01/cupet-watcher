@@ -96,6 +96,23 @@ export interface RawDatoAdicional {
 }
 
 // GET /servicio/{id}
+export interface RawValoracion {
+  id: number;
+  valoracion: number;
+  mensaje: string;
+  usuario: string;
+  date: string;
+}
+
+export interface ReviewsSlice {
+  "5_stars": number;
+  "4_stars": number;
+  "3_stars": number;
+  "2_stars": number;
+  "1_stars": number;
+  sin_valorar: number;
+}
+
 export interface ServicioDetail {
   id: number;
   establishment_id: number;
@@ -111,10 +128,15 @@ export interface ServicioDetail {
   disponibilidades: number;
   tiene_validacion: number;
   views: number;
-  turns: string; // JSON-encoded array
+  turns: string;
   datos_adicionales: RawDatoAdicional[];
   cantidad_datos_adicionales: number;
   public_link: string;
+  descripcion?: string;
+  image_urls?: string[];
+  valoraciones?: RawValoracion[];
+  reviews_slice?: ReviewsSlice;
+  subcategorias_actividades?: RawSubcatActividad[];
 }
 
 // GET /sala-espera-virtual/v2/posicion-visual -> data[]
