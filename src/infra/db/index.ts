@@ -1,8 +1,6 @@
 import "reflect-metadata";
 import type { DataSource, EntityTarget, ObjectLiteral, Repository } from "typeorm";
-import { getMetadataArgsStorage } from "typeorm";
 import { getAppDataSource, createDataSource } from "./data-source";
-import { entities } from "./entities";
 import { AppUser } from "./entities/app-user.entity";
 import { XutilLink } from "./entities/xutil-link.entity";
 import { ScraperCredential } from "./entities/scraper-credential.entity";
@@ -51,30 +49,11 @@ export async function db(): Promise<DataSource> {
   return globalThis.__dbInit;
 }
 
-function entityTableName(entity: EntityTarget<ObjectLiteral>): string | undefined {
-  if (typeof entity === "string") return entity;
-  const table = getMetadataArgsStorage().tables.find((t) => t.target === entity);
-  return typeof table?.name === "string" ? table.name : undefined;
-}
-
-function resolveEntityName(entity: EntityTarget<ObjectLiteral>): string {
-  if (typeof entity === "string") return entity;
-
-  if (typeof entity === "function") {
-    const canonical = entities.find((e) => e === entity || e.name === entity.name);
-    if (canonical) {
-      return entityTableName(canonical) ?? canonical.name;
-    }
-  }
-
-  return entityTableName(entity) ?? (typeof entity === "function" ? entity.name : String(entity));
-}
-
 export async function repo<T extends ObjectLiteral>(
   entity: EntityTarget<T>,
 ): Promise<Repository<T>> {
   const ds = await db();
-  return ds.getRepository(resolveEntityName(entity)) as Repository<T>;
+  return ds.getRepository(entity) as Repository<T>;
 }
 
 export async function syncSchema(): Promise<void> {

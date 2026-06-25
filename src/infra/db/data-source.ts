@@ -2,6 +2,7 @@ import "@/load-env";
 import "reflect-metadata";
 import { DataSource, DefaultNamingStrategy, type NamingStrategyInterface } from "typeorm";
 import { entities } from "./entities";
+import { AssignIdSubscriber } from "./assign-id.subscriber";
 
 class PrismaNamingStrategy
   extends DefaultNamingStrategy
@@ -33,6 +34,7 @@ export function createDataSource(synchronize = false): DataSource {
     type: "postgres",
     url: getDatabaseUrl(),
     entities,
+    subscribers: [AssignIdSubscriber],
     synchronize,
     namingStrategy: new PrismaNamingStrategy(),
     ssl:

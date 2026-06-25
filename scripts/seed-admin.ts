@@ -9,10 +9,8 @@ async function main(): Promise<void> {
   const password = env.ADMIN_PASSWORD;
 
   if (!email || !password) {
-    process.stderr.write(
-      "Set ADMIN_EMAIL and ADMIN_PASSWORD in .env (or Render env vars), then run again.\n",
-    );
-    process.exit(1);
+    process.stdout.write("[seed-admin] Skipped (ADMIN_EMAIL / ADMIN_PASSWORD not set).\n");
+    return;
   }
 
   await syncSchema();
