@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 const schema = z.object({
-  DATABASE_URL: z.string().url(),
+  // Optional at build time — the build does not connect to the DB. data-source.ts
+  // resolves/validates the real URL at runtime (initialize()).
+  DATABASE_URL: z.string().optional().default(""),
   XUTIL_BASE: z.string().url().default("https://ticket.xutil.net/apps/bienestar/api"),
   XUTIL_OAUTH_URL: z.string().url().default("https://ticket.xutil.net/oauth2/token"),
   XUTIL_APP_HEADER: z.string().default("agencia-citas"),

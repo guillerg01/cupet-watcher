@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import type { DataSource, EntityTarget, ObjectLiteral, Repository } from "typeorm";
 import { getMetadataArgsStorage } from "typeorm";
-import { AppDataSource, createDataSource } from "./data-source";
+import { getAppDataSource, createDataSource } from "./data-source";
 import { entities } from "./entities";
 import { AppUser } from "./entities/app-user.entity";
 import { XutilLink } from "./entities/xutil-link.entity";
@@ -39,10 +39,11 @@ declare global {
 }
 
 export async function db(): Promise<DataSource> {
-  if (AppDataSource.isInitialized) return AppDataSource;
+  const ds = getAppDataSource();
+  if (ds.isInitialized) return ds;
 
   if (!globalThis.__dbInit) {
-    globalThis.__dbInit = AppDataSource.initialize();
+    globalThis.__dbInit = ds.initialize();
   }
 
   return globalThis.__dbInit;
@@ -81,4 +82,4 @@ export async function syncSchema(): Promise<void> {
   await ds.destroy();
 }
 
-export { AppDataSource, createDataSource } from "./data-source";
+export { getAppDataSource, createDataSource } from "./data-source";

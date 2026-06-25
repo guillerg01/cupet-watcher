@@ -37,10 +37,18 @@ export function createDataSource(synchronize = false): DataSource {
     namingStrategy: new PrismaNamingStrategy(),
     ssl:
       process.env.DATABASE_URL?.includes("sslmode=require") ||
-      process.env.DATABASE_URL?.includes("render.com")
+      process.env.DATABASE_URL?.includes("render.com") ||
+      process.env.DATABASE_URL?.includes("neon.tech")
         ? { rejectUnauthorized: false }
         : undefined,
   });
 }
 
-export const AppDataSource = createDataSource(false);
+let appDataSource: DataSource | undefined;
+
+export function getAppDataSource(): DataSource {
+  if (!appDataSource) {
+    appDataSource = createDataSource(false);
+  }
+  return appDataSource;
+}
