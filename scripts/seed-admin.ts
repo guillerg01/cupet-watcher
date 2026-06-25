@@ -1,6 +1,6 @@
 import "@/load-env";
 import "reflect-metadata";
-import { hash } from "bcryptjs";
+import bcrypt from "bcryptjs";
 import { syncSchema, repo, AppUser, UserRole } from "@/infra/db";
 import { env } from "@/env";
 
@@ -17,7 +17,7 @@ async function main(): Promise<void> {
 
   const userRepo = await repo(AppUser);
   const existing = await userRepo.findOne({ where: { email } });
-  const passwordHash = await hash(password, 12);
+  const passwordHash = await bcrypt.hash(password, 12);
 
   if (existing) {
     existing.role = UserRole.ADMIN;
