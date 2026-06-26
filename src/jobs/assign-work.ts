@@ -7,6 +7,7 @@ import {
 } from "@/infra/db";
 import { In, LessThan, MoreThan } from "typeorm";
 import { getScanIntervalMinutes } from "@/lib/app-settings";
+import { wakeDeviceForScan } from "@/lib/device-scan-wake";
 
 const ONLINE_WINDOW_MS = 5 * 60 * 1000; // device online if heartbeat within this
 const ASSIGNMENT_TTL_MS = 8 * 60 * 1000; // pending assignment lifetime
@@ -65,6 +66,8 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
         claimedAt: null,
         attempts: a.attempts + 1,
       });
+      // Wake the failover device so it scans even with its app closed.
+      await wakeDeviceForScan(others[0], a.id);
       reassigned++;
     }
   }
@@ -103,7 +106,7 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
 
     if (sinceLastSweep >= intervalMs) {
       const target = onlineDevices[0]; // ordered by lastAssignedAt ASC
-      await assignmentRepo.save({
+      const saved = await assignmentRepo.save({
         deviceId: target.id,
         kind: AssignmentKind.CATALOG,
         stationIds: [],
@@ -112,6 +115,9 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
         attempts: 0,
       });
       await deviceRepo.update(target.id, { lastAssignedAt: new Date() });
+      // Wake the device via FCM data push so it sweeps even if the app is
+      // closed (it won't poll /devices/poll on its own when killed).
+      await wakeDeviceForScan(target.id, saved.id);
       created++;
     }
   }

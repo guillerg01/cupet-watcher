@@ -65,11 +65,11 @@ function isUnrecoverable(error?: string): boolean {
   );
 }
 
-export async function sendFcmPush(
+// Shared: authenticate once, then POST one message per token (v1 has no
+// multicast). `buildMessage` returns the per-token message body.
+async function postFcmMessages(
   tokens: string[],
-  title: string,
-  body: string,
-  data?: Record<string, string>,
+  buildMessage: (token: string) => Record<string, unknown>,
 ): Promise<FcmPushResult[]> {
   if (tokens.length === 0) return [];
 
@@ -97,28 +97,13 @@ export async function sendFcmPush(
     "Content-Type": "application/json",
   };
 
-  // v1 has no multicast — one HTTP call per token. Fire them in parallel.
   return Promise.all(
     tokens.map(async (token): Promise<FcmPushResult> => {
       try {
         const res = await fetch(url, {
           method: "POST",
           headers,
-          body: JSON.stringify({
-            message: {
-              token,
-              notification: { title, body },
-              data: data ?? { type: "CUPET_ALERT" },
-              android: {
-                priority: "HIGH",
-                notification: {
-                  sound: "default",
-                  channel_id: ALERT_CHANNEL_ID,
-                  notification_priority: "PRIORITY_MAX",
-                },
-              },
-            },
-          }),
+          body: JSON.stringify({ message: buildMessage(token) }),
         });
         if (res.ok) return { ok: true, status: res.status };
         const json = (await res.json().catch(() => null)) as {
@@ -132,6 +117,44 @@ export async function sendFcmPush(
       }
     }),
   );
+}
+
+/** Visible alert push (notification + data, MAX priority). */
+export async function sendFcmPush(
+  tokens: string[],
+  title: string,
+  body: string,
+  data?: Record<string, string>,
+): Promise<FcmPushResult[]> {
+  return postFcmMessages(tokens, (token) => ({
+    token,
+    notification: { title, body },
+    data: data ?? { type: "CUPET_ALERT" },
+    android: {
+      priority: "HIGH",
+      notification: {
+        sound: "default",
+        channel_id: ALERT_CHANNEL_ID,
+        notification_priority: "PRIORITY_MAX",
+      },
+    },
+  }));
+}
+
+/**
+ * Data-only, high-priority message. No `notification` block, so Android wakes
+ * the app's background handler (headless) instead of showing a tray entry —
+ * this is how the coordinator tells a closed device to run a sweep.
+ */
+export async function sendFcmData(
+  tokens: string[],
+  data: Record<string, string>,
+): Promise<FcmPushResult[]> {
+  return postFcmMessages(tokens, (token) => ({
+    token,
+    data,
+    android: { priority: "HIGH" },
+  }));
 }
 
 export { isUnrecoverable as isUnrecoverableFcmError };
