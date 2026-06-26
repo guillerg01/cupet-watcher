@@ -187,8 +187,17 @@ export async function POST(req: Request): Promise<Response> {
     if (assignmentId) {
       await dataSource.query(
         `UPDATE "Assignment" SET status = $1, "completedAt" = $2
-         WHERE id = $3 AND "deviceId" = $4`,
-        [AssignmentStatus.DONE, now, assignmentId, auth.deviceId],
+         WHERE id = $3 AND "deviceId" = $4
+           AND status IN ($5, $6, $7)`,
+        [
+          AssignmentStatus.DONE,
+          now,
+          assignmentId,
+          auth.deviceId,
+          AssignmentStatus.PENDING,
+          AssignmentStatus.CLAIMED,
+          AssignmentStatus.EXPIRED,
+        ],
       );
     }
 

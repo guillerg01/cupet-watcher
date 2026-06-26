@@ -8,11 +8,13 @@ import {
 import { In, LessThan, MoreThan } from "typeorm";
 import { getScanIntervalMinutes } from "@/lib/app-settings";
 import { wakeDeviceForScan } from "@/lib/device-scan-wake";
+import {
+  ASSIGNMENT_TTL_MS,
+  CLAIM_TIMEOUT_MS,
+  MAX_ASSIGNMENT_ATTEMPTS,
+} from "@/lib/assignment-timing";
 
-const ONLINE_WINDOW_MS = 5 * 60 * 1000; // device online if heartbeat within this
-const ASSIGNMENT_TTL_MS = 8 * 60 * 1000; // pending assignment lifetime
-const CLAIM_TIMEOUT_MS = 5 * 60 * 1000; // claimed-but-no-result -> failover
-const MAX_ATTEMPTS = 3;
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 
 export interface AssignWorkResult {
   onlineDevices: number;
@@ -56,7 +58,7 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
   });
   for (const a of staleClaimed) {
     const others = deviceIds.filter((id) => id !== a.deviceId);
-    if (a.attempts + 1 >= MAX_ATTEMPTS || others.length === 0) {
+    if (a.attempts + 1 >= MAX_ASSIGNMENT_ATTEMPTS || others.length === 0) {
       await assignmentRepo.update(a.id, { status: AssignmentStatus.EXPIRED });
       expired++;
     } else {
@@ -76,7 +78,7 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
   const expireResult = await assignmentRepo.update(
     {
       status: AssignmentStatus.PENDING,
-      createdAt: LessThan(new Date(now - ASSIGNMENT_TTL_MS)),
+      expiresAt: LessThan(new Date(now)),
     },
     { status: AssignmentStatus.EXPIRED },
   );

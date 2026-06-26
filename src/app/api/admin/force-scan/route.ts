@@ -3,10 +3,9 @@ import { In } from "typeorm";
 import { requireAdminApi } from "@/lib/admin";
 import { repo, Device, Assignment, AssignmentStatus, AssignmentKind } from "@/infra/db";
 import { wakeDeviceForScan } from "@/lib/device-scan-wake";
+import { ASSIGNMENT_TTL_MS } from "@/lib/assignment-timing";
 
 export const dynamic = "force-dynamic";
-
-const ASSIGNMENT_TTL_MS = 8 * 60 * 1000;
 
 /**
  * Admin "force scan now": for every device with a push token, create a CATALOG
