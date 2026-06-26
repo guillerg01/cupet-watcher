@@ -53,8 +53,8 @@ export default function TestEmailPanel(): React.JSX.Element {
           Correo de prueba a suscriptores
         </h2>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          Manda un correo de notificación de prueba a TODOS los usuarios con alertas de
-          nuevos cupets activadas. Son correos reales · Resend free corta en 100/día.
+          Manda un correo de prueba a TODOS los usuarios registrados (sin importar
+          provincia ni preferencias). El aviso automático sí respeta provincia + alertas.
         </p>
         {configIssue && (
           <p className="text-sm mt-2" style={{ color: "var(--danger, #ef5a5a)" }}>

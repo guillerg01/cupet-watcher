@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin";
 import { repo, AppUser } from "@/infra/db";
 import { sendNewCupetEmail, gmailConfigured, emailConfigIssue } from "@/infra/email/resend";
+import { env } from "@/env";
 
 export const dynamic = "force-dynamic";
 
@@ -38,23 +39,30 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: issue }, { status: 500 });
   }
 
+  // TEST button = blast to EVERY registered user with an email, regardless of
+  // notifyNew / province. (The automatic path in send-notifications keeps the
+  // province + notifyNew filtering.) Always include the admin too.
   const userRepo = await repo(AppUser);
-  const subscribers = await userRepo
+  const users = await userRepo
     .createQueryBuilder("u")
-    .where("u.notifyNew = true")
-    .andWhere("u.email IS NOT NULL")
+    .where("u.email IS NOT NULL")
     .andWhere("u.email <> ''")
     .select(["u.id", "u.email"])
     .getMany();
 
-  const targets = subscribers.slice(0, SEND_CAP);
+  const recipients = new Set<string>();
+  const adminEmail = env.ADMIN_EMAIL?.trim().toLowerCase();
+  if (adminEmail && adminEmail.includes("@")) recipients.add(adminEmail);
+  for (const u of users) recipients.add(u.email.toLowerCase());
+
+  const targets = Array.from(recipients).slice(0, SEND_CAP);
 
   let sent = 0;
   let failed = 0;
   let lastError: string | null = null;
 
-  for (const user of targets) {
-    const result = await sendNewCupetEmail(user.email, {
+  for (const email of targets) {
+    const result = await sendNewCupetEmail(email, {
       stationName: "Cupet de prueba",
       establishment: "PRUEBA · Cupet Watcher",
       provinceName: "Notificación de prueba",
@@ -69,18 +77,16 @@ export async function POST(req: Request): Promise<Response> {
     }
   }
 
-  const truncated = subscribers.length > SEND_CAP;
+  const truncated = recipients.size > SEND_CAP;
   return NextResponse.json({
-    subscribers: subscribers.length,
+    recipients: recipients.size,
     attempted: targets.length,
     sent,
     failed,
     truncated,
     message:
-      subscribers.length === 0
-        ? "Sin suscriptores (nadie con notifyNew + correo)."
-        : `Prueba enviada: ${sent} OK, ${failed} fallidos de ${targets.length}` +
-          (truncated ? ` · cortado en ${SEND_CAP} (límite diario Gmail)` : "") +
-          (lastError ? ` · último error: ${lastError}` : ""),
+      `Prueba enviada a ${targets.length} usuario(s): ${sent} OK, ${failed} fallidos` +
+      (truncated ? ` · cortado en ${SEND_CAP}` : "") +
+      (lastError ? ` · último error: ${lastError}` : ""),
   });
 }

@@ -11,11 +11,19 @@ export const STATE_STYLE: Record<
   waitroom: { color: "var(--text-muted)", fill: "var(--muted-fill)", border: "var(--muted-border)" },
 };
 
+// Mirrors the backend NEW_VIEWS_THRESHOLD: under this many views = still new.
+export const NEW_VIEWS_THRESHOLD = 100;
+
 export function cupetState(s: {
   disponibilidades: number;
   admiteSalaEspera: boolean;
   confirmed: boolean;
+  isNew?: boolean;
+  views?: number | null;
 }): { state: CupetState; label: string } {
+  // "New" wins so freshly-appeared cupets stand out (matches app + admin).
+  const isNew = s.isNew ?? (s.views != null && s.views < NEW_VIEWS_THRESHOLD);
+  if (isNew) return { state: "new", label: "NUEVO" };
   if (!s.confirmed) return { state: "pending", label: "SIN DETALLE" };
   if (s.disponibilidades > 0)
     return { state: "available", label: `${s.disponibilidades} cupos` };
