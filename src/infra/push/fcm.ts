@@ -46,7 +46,8 @@ export async function sendFcmPush(
         results?: Array<{ error?: string }>;
       } | null;
 
-      const perToken = json?.results ?? batch.map(() => ({}));
+      const perToken: Array<{ error?: string }> =
+        json?.results ?? batch.map(() => ({} as { error?: string }));
       for (let j = 0; j < batch.length; j++) {
         const err = perToken[j]?.error;
         results.push({
