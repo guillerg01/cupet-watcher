@@ -11,6 +11,7 @@ import {
 } from "@/infra/db";
 import StatCard from "@/components/StatCard";
 import TestPushPanel from "./TestPushPanel";
+import ScanIntervalPanel from "./ScanIntervalPanel";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,8 @@ export default async function AdminOverviewPage(): Promise<React.JSX.Element> {
         <StatCard label="Logins fallidos" value={failedLogins} accent={failedLogins > 0} />
         <StatCard label="Admins" value={admins} />
       </div>
+
+      <ScanIntervalPanel />
 
       <TestPushPanel />
 

@@ -6,6 +6,7 @@ import {
   AssignmentKind,
 } from "@/infra/db";
 import { In, LessThan, MoreThan } from "typeorm";
+import { getScanIntervalMinutes } from "@/lib/app-settings";
 
 const ONLINE_WINDOW_MS = 5 * 60 * 1000; // device online if heartbeat within this
 const ASSIGNMENT_TTL_MS = 8 * 60 * 1000; // pending assignment lifetime
@@ -89,17 +90,30 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
 
   let created = 0;
   if (outstanding === 0) {
-    const target = onlineDevices[0]; // ordered by lastAssignedAt ASC
-    await assignmentRepo.save({
-      deviceId: target.id,
-      kind: AssignmentKind.CATALOG,
-      stationIds: [],
-      status: AssignmentStatus.PENDING,
-      expiresAt: new Date(now + ASSIGNMENT_TTL_MS),
-      attempts: 0,
+    // Pace sweeps to the admin-configured interval. The worker cron ticks far
+    // more often than we want to sweep, so without this gate a fast-completing
+    // sweep would be re-assigned every few minutes instead of every 30/60 min.
+    const intervalMs = (await getScanIntervalMinutes()) * 60 * 1000;
+    const [latest] = await assignmentRepo.find({
+      where: { kind: AssignmentKind.CATALOG },
+      order: { createdAt: "DESC" },
+      take: 1,
     });
-    await deviceRepo.update(target.id, { lastAssignedAt: new Date() });
-    created++;
+    const sinceLastSweep = latest ? now - latest.createdAt.getTime() : Infinity;
+
+    if (sinceLastSweep >= intervalMs) {
+      const target = onlineDevices[0]; // ordered by lastAssignedAt ASC
+      await assignmentRepo.save({
+        deviceId: target.id,
+        kind: AssignmentKind.CATALOG,
+        stationIds: [],
+        status: AssignmentStatus.PENDING,
+        expiresAt: new Date(now + ASSIGNMENT_TTL_MS),
+        attempts: 0,
+      });
+      await deviceRepo.update(target.id, { lastAssignedAt: new Date() });
+      created++;
+    }
   }
 
   return { onlineDevices: deviceIds.length, created, reassigned, expired };
