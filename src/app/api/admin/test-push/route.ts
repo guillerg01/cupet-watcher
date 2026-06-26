@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { repo, Device } from "@/infra/db";
-import { sendExpoPush } from "@/infra/push/expo";
 import { appendToQueue, newPendingPush } from "@/lib/push-queue";
+import { sendDevicePush } from "@/lib/push-send";
 
 export const dynamic = "force-dynamic";
 
@@ -34,24 +34,21 @@ export async function POST(req: Request): Promise<Response> {
     queued += count;
   }
 
-  const tokens = devices
-    .map((d) => d.pushToken)
-    .filter((t): t is string => !!t && t.startsWith("ExponentPushToken"));
+  const tokens = [...new Set(devices.map((d) => d.pushToken).filter((t): t is string => !!t))];
 
   let expoSent = 0;
+  let fcmSent = 0;
   if (tokens.length > 0) {
-    const messages = tokens.flatMap((to) =>
-      Array.from({ length: count }, (_, i) => ({
-        to,
+    for (let i = 0; i < count; i++) {
+      const r = await sendDevicePush({
+        tokens,
         title: "Cupet Watcher — prueba",
-        body: `Alerta Expo ${i + 1}/${count}`,
-        sound: "default" as const,
-        priority: "high" as const,
+        body: `Alerta ${i + 1}/${count}`,
         data: { type: "TEST", ts: String(now + i) },
-      })),
-    );
-    const results = await sendExpoPush(messages);
-    expoSent = results.filter((r) => r.ok).length;
+      });
+      expoSent += r.expoSent;
+      fcmSent += r.fcmSent;
+    }
   }
 
   return NextResponse.json({
@@ -59,10 +56,11 @@ export async function POST(req: Request): Promise<Response> {
     devices: devices.length,
     perDevice: count,
     expoSent,
-    expoTotal: tokens.length * count,
+    fcmSent,
+    pushTokens: tokens.length,
     message:
       devices.length > 0
-        ? `Encoladas ${count} notificación(es) en ${devices.length} dispositivo(s). La app las recibe en heartbeats (~15s).`
+        ? `Encoladas ${count} notificación(es) en ${devices.length} dispositivo(s). Push directo: Expo ${expoSent}, FCM ${fcmSent}.`
         : "No hay dispositivos registrados",
   });
 }

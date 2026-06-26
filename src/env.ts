@@ -33,6 +33,7 @@ const schema = z.object({
   SCRAPE_RATE_LIMIT_COOLDOWN_MS: z.coerce.number().default(10_000),
   WORKER_CHECK_CRON: z.string().default("*/5 * * * *"),
   PREDICT_CRON: z.string().default("0 */6 * * *"),
+  FCM_SERVER_KEY: z.string().optional().default(""),
 });
 
 export const env = schema.parse(process.env);

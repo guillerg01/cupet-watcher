@@ -1,6 +1,6 @@
 import { db } from "@/infra/db";
-import { sendExpoPush } from "@/infra/push/expo";
 import { appendToQueue, newPendingPush } from "@/lib/push-queue";
+import { sendDevicePush } from "@/lib/push-send";
 
 type DeviceRow = {
   id: string;
@@ -19,7 +19,7 @@ export async function notifyMobileDevices(input: {
   title: string;
   body: string;
   provinceId?: number;
-}): Promise<{ devices: number; expoSent: number }> {
+}): Promise<{ devices: number; expoSent: number; fcmSent: number }> {
   const ds = await db();
   const devices = (await ds.query(
     `SELECT id, "pushToken", "watchProvinceIds", "pendingPushQueue"
@@ -30,7 +30,7 @@ export async function notifyMobileDevices(input: {
     input.provinceId == null ? true : deviceWatchesProvince(d, input.provinceId),
   );
 
-  const expoMessages: Parameters<typeof sendExpoPush>[0] = [];
+  const pushTokens: string[] = [];
 
   for (const d of targets) {
     const item = newPendingPush(input.title, input.body);
@@ -40,23 +40,19 @@ export async function notifyMobileDevices(input: {
       [JSON.stringify(queue), d.id],
     );
 
-    if (d.pushToken?.startsWith("ExponentPushToken")) {
-      expoMessages.push({
-        to: d.pushToken,
-        title: input.title,
-        body: input.body,
-        sound: "default",
-        priority: "high",
-        data: { type: "CUPET_ALERT" },
-      });
-    }
+    if (d.pushToken) pushTokens.push(d.pushToken);
   }
 
-  let expoSent = 0;
-  if (expoMessages.length > 0) {
-    const results = await sendExpoPush(expoMessages);
-    expoSent = results.filter((r) => r.ok).length;
-  }
+  const uniqueTokens = [...new Set(pushTokens)];
+  const { expoSent, fcmSent } =
+    uniqueTokens.length > 0
+      ? await sendDevicePush({
+          tokens: uniqueTokens,
+          title: input.title,
+          body: input.body,
+          data: { type: "CUPET_ALERT" },
+        })
+      : { expoSent: 0, fcmSent: 0 };
 
-  return { devices: targets.length, expoSent };
+  return { devices: targets.length, expoSent, fcmSent };
 }

@@ -7,7 +7,8 @@ interface PushResult {
   devices: number;
   perDevice: number;
   expoSent: number;
-  expoTotal: number;
+  fcmSent?: number;
+  pushTokens?: number;
   message: string;
 }
 
@@ -76,8 +77,8 @@ export default function TestPushPanel(): React.JSX.Element {
         >
           <p>{result.message}</p>
           <p style={{ color: "var(--text-muted)" }}>
-            Cola: {result.queued} en {result.devices} dispositivo(s) · Expo: {result.expoSent}/
-            {result.expoTotal}
+            Cola: {result.queued} en {result.devices} dispositivo(s) · Expo: {result.expoSent}
+            {result.fcmSent != null ? ` · FCM: ${result.fcmSent}` : ""}
           </p>
         </div>
       )}
