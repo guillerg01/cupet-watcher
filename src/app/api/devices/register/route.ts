@@ -12,12 +12,6 @@ const schema = z.object({
   deviceId: z.string().optional(),
 });
 
-/**
- * Phone registers as a worker. Identity = the ticket username the user logged in
- * with ON THE DEVICE (Cuban IP). The server cannot verify ticket (no Cuban IP), so
- * it trusts the login and labels the device by username; submitted data is validated
- * separately. Returns a deviceId + commandToken the phone stores.
- */
 export async function POST(req: Request): Promise<Response> {
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
@@ -26,24 +20,37 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const { xutilUsername, pushToken, platform, deviceId } = parsed.data;
+  const platformNorm = platform ?? "android";
   const deviceRepo = await repo(Device);
   const now = new Date();
 
-  let device =
-    deviceId != null ? await deviceRepo.findOne({ where: { id: deviceId } }) : null;
+  let device: Device | null = null;
+
+  if (deviceId) {
+    device = await deviceRepo.findOne({ where: { id: deviceId } });
+  }
+
+  if (!device) {
+    device = await deviceRepo.findOne({
+      where: { xutilUsername, platform: platformNorm },
+      order: { lastHeartbeatAt: "DESC" },
+    });
+  }
 
   if (device) {
     await deviceRepo.update(device.id, {
       xutilUsername,
       pushToken: pushToken ?? device.pushToken,
-      platform: platform ?? device.platform,
+      platform: platformNorm,
+      ticketLinked: true,
       lastHeartbeatAt: now,
     });
+    device = await deviceRepo.findOneOrFail({ where: { id: device.id } });
   } else {
     device = await deviceRepo.save({
       xutilUsername,
       pushToken: pushToken ?? null,
-      platform: platform ?? "android",
+      platform: platformNorm,
       ticketLinked: true,
       lastHeartbeatAt: now,
     });

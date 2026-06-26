@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { Not, In } from "typeorm";
-import {
-  repo,
-  Province,
-  Station,
-  StationSnapshot,
-  DetectionEvent,
-  Assignment,
-  AssignmentStatus,
-  DetectionType,
-} from "@/infra/db";
+import { repo, Province, Assignment, AssignmentStatus, DetectionType, db } from "@/infra/db";
+import { newId } from "@/infra/db/id";
 import { deviceFromRequest } from "@/lib/device-auth";
 import { detect } from "@/core/detection/detect";
 import type { PriorStationState } from "@/core/detection/types";
 import type { FuelStation } from "@/core/station/types";
+import {
+  upsertStationRows,
+  deactivateUnseenStations,
+  insertStationSnapshots,
+  loadConfirmedStationPrior,
+} from "@/lib/ingest-stations";
+import { notifyMobileDevices } from "@/lib/device-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -33,17 +31,11 @@ const stationSchema = z.object({
 
 const schema = z.object({
   assignmentId: z.string().optional(),
-  // true when the phone swept the whole catalog (safe to deactivate unseen stations)
   complete: z.boolean().default(false),
   provinces: z.array(z.object({ id: z.number().int(), name: z.string() })).optional(),
   stations: z.array(stationSchema).max(5000),
 });
 
-/**
- * Catalog ingest — the heart of "is there a new cupet?".
- * Port of jobs/scrape-catalog.ts, fed by the phone (Cuban IP) instead of the server.
- * Upserts fuel stations, runs the pure detect() diff, emits DetectionEvents.
- */
 export async function POST(req: Request): Promise<Response> {
   try {
     const auth = deviceFromRequest(req);
@@ -61,178 +53,129 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const { assignmentId, complete, provinces, stations } = parsed.data;
-  const current: FuelStation[] = stations.map((s) => ({
-    id: s.id,
-    name: s.name,
-    establishment: s.establishment,
-    provinceName: s.provinceName,
-    municipio: s.municipio ?? null,
-    admiteSalaEspera: s.admiteSalaEspera,
-    tieneValidacion: s.tieneValidacion,
-    disponibilidades: s.disponibilidades,
-    rating: s.rating ?? null,
-    views: s.views ?? null,
-  }));
+    const current: FuelStation[] = stations.map((s) => ({
+      id: s.id,
+      name: s.name,
+      establishment: s.establishment,
+      provinceName: s.provinceName,
+      municipio: s.municipio ?? null,
+      admiteSalaEspera: s.admiteSalaEspera,
+      tieneValidacion: s.tieneValidacion,
+      disponibilidades: s.disponibilidades,
+      rating: s.rating ?? null,
+      views: s.views ?? null,
+    }));
 
-  const provinceRepo = await repo(Province);
+    const provinceRepo = await repo(Province);
 
-  // Phone may send the province catalog so IDs resolve even before a seed runs.
-  if (provinces && provinces.length > 0) {
-    for (const p of provinces) {
-      await provinceRepo.upsert({ id: p.id, name: p.name.trim() }, ["id"]);
+    if (provinces && provinces.length > 0) {
+      for (const p of provinces) {
+        await provinceRepo.upsert({ id: p.id, name: p.name.trim() }, ["id"]);
+      }
     }
-  }
 
-  const allProvinces = await provinceRepo.find();
-  const provinceMap = new Map<string, number>(
-    allProvinces.map((p) => [p.name.trim().toUpperCase(), p.id]),
-  );
+    const allProvinces = await provinceRepo.find();
+    const provinceMap = new Map<string, number>(
+      allProvinces.map((p) => [p.name.trim().toUpperCase(), p.id]),
+    );
 
-  const stationRepo = await repo(Station);
-  const existingStations = await stationRepo.find({
-    select: { id: true, detAdmiteSalaEspera: true, detDisponibilidades: true, confirmed: true },
-  });
-  // Detection prior = the baseline from the last COMPLETE sweep. Only CONFIRMED
-  // stations count, so a station inserted by a partial flush this sweep is still
-  // detected as NEW on the complete flush, and partials never pollute the diff.
-  const prior = new Map<number, PriorStationState>(
-    existingStations
-      .filter((s) => s.confirmed)
-      .map((s) => [
-        s.id,
-        {
-          id: s.id,
-          admiteSalaEspera: s.detAdmiteSalaEspera,
-          disponibilidades: s.detDisponibilidades ?? 0,
-        },
-      ]),
-  );
+    const priorRaw = await loadConfirmedStationPrior();
+    const prior = new Map<number, PriorStationState>(priorRaw);
 
-  // Detection runs ONLY on a complete sweep (full set). Cold start: the first
-  // complete sweep (no confirmed stations yet) is a BASELINE — no events, else
-  // every station would diff as NEW and flood notifications.
-  const isFirstSweep = prior.size === 0;
-  const eventDrafts = complete && !isFirstSweep ? detect({ prior, current }) : [];
+    const isFirstSweep = prior.size === 0;
+    const eventDrafts = complete && !isFirstSweep ? detect({ prior, current }) : [];
 
-  const seenIds = new Set<number>();
-  const now = new Date();
-  const BATCH = 50;
-  const existingIdSet = new Set(
-    (await stationRepo.find({ select: { id: true } })).map((s) => s.id),
-  );
+    const seenIds = new Set<number>();
+    const now = new Date();
+    const BATCH = 50;
+    const upsertBatch: Parameters<typeof upsertStationRows>[0] = [];
 
-  for (let i = 0; i < current.length; i += BATCH) {
-    const batch = current.slice(i, i + BATCH);
-    for (const station of batch) {
+    for (const station of current) {
       const provinceId = provinceMap.get(station.provinceName.trim().toUpperCase());
       if (provinceId === undefined) continue;
       seenIds.add(station.id);
-
-      const common = {
-        name: station.name,
-        establishment: station.establishment,
-        provinceId,
-        municipio: station.municipio,
-        admiteSalaEspera: station.admiteSalaEspera,
-        tieneValidacion: station.tieneValidacion,
-        disponibilidades: station.disponibilidades,
-        active: true,
-        lastSeenAt: now,
-        ...(complete
-          ? {
-              detDisponibilidades: station.disponibilidades,
-              detAdmiteSalaEspera: station.admiteSalaEspera,
-              confirmed: true,
-            }
-          : {}),
-      };
-      if (existingIdSet.has(station.id)) {
-        await stationRepo.update(station.id, common);
-      } else {
-        existingIdSet.add(station.id);
-        await stationRepo.save({ id: station.id, ...common, firstSeenAt: now });
-      }
+      upsertBatch.push({ station, provinceId, complete });
     }
-  }
 
-  // Only deactivate unseen stations when the phone reports a COMPLETE sweep —
-  // a partial sweep must not wipe the active set.
-  if (complete && seenIds.size > 0) {
-    await stationRepo.update(
-      { id: Not(In(Array.from(seenIds))), active: true },
-      { active: false },
-    );
-  }
+    for (let i = 0; i < upsertBatch.length; i += BATCH) {
+      await upsertStationRows(upsertBatch.slice(i, i + BATCH), now);
+    }
 
-  // Lightweight availability snapshots from the catalog data.
-  const snapshotRepo = await repo(StationSnapshot);
-  for (const s of current) {
-    if (!seenIds.has(s.id)) continue;
-    await snapshotRepo.save({
-      stationId: s.id,
-      disponible: s.disponibilidades > 0,
-      disponibilidades: s.disponibilidades,
-      views: s.views,
-      rating: s.rating,
-      queuePosicion: null,
-      queueTotal: null,
-    });
-  }
+    if (complete && seenIds.size > 0) {
+      await deactivateUnseenStations(Array.from(seenIds));
+    }
 
-  const eventRepo = await repo(DetectionEvent);
-  let newEvents = 0;
-  const newCupets: Array<{
-    stationId: number;
-    name: string;
-    provinceId: number;
-    provinceName: string;
-    type: string;
-  }> = [];
+    await insertStationSnapshots(current, seenIds);
 
-  const stationNameById = new Map(current.map((s) => [s.id, s.name]));
+    const dataSource = await db();
+    let newEvents = 0;
+    const newCupets: Array<{
+      stationId: number;
+      name: string;
+      provinceId: number;
+      provinceName: string;
+      type: string;
+    }> = [];
 
-  for (const draft of eventDrafts) {
-    const provinceId = provinceMap.get(draft.provinceName.trim().toUpperCase());
-    if (provinceId === undefined) continue;
-    try {
-      await eventRepo.save({
-        stationId: draft.stationId,
-        provinceId,
-        type: draft.type as DetectionType,
-        notified: false,
-      });
-      newEvents++;
-      if (draft.type === DetectionType.NEW) {
-        newCupets.push({
-          stationId: draft.stationId,
-          name: stationNameById.get(draft.stationId) ?? `Cupet #${draft.stationId}`,
+    const stationNameById = new Map(current.map((s) => [s.id, s.name]));
+
+    for (const draft of eventDrafts) {
+      const provinceId = provinceMap.get(draft.provinceName.trim().toUpperCase());
+      if (provinceId === undefined) continue;
+      try {
+        await dataSource.query(
+          `INSERT INTO "DetectionEvent" (id, "stationId", "provinceId", type, notified)
+           VALUES ($1, $2, $3, $4, false)`,
+          [newId(), draft.stationId, provinceId, draft.type],
+        );
+        newEvents++;
+
+        const name = stationNameById.get(draft.stationId) ?? `Cupet #${draft.stationId}`;
+        if (draft.type === DetectionType.NEW) {
+          newCupets.push({
+            stationId: draft.stationId,
+            name,
+            provinceId,
+            provinceName: draft.provinceName,
+            type: draft.type,
+          });
+        }
+
+        const title =
+          draft.type === DetectionType.NEW
+            ? "Cupet nuevo"
+            : draft.type === DetectionType.BECAME_AVAILABLE
+              ? "Cupet con disponibilidad"
+              : "Sala de espera habilitada";
+
+        await notifyMobileDevices({
+          title,
+          body: `${name} · ${draft.provinceName}`,
           provinceId,
-          provinceName: draft.provinceName,
-          type: draft.type,
         });
+      } catch {
+        /* duplicate / constraint */
       }
-    } catch {
-      // duplicate / constraint — ignore
     }
-  }
 
-  if (assignmentId) {
-    const assignmentRepo = await repo(Assignment);
-    await assignmentRepo.update(
-      { id: assignmentId, deviceId: auth.deviceId },
-      { status: AssignmentStatus.DONE, completedAt: now },
-    );
-  }
+    if (assignmentId) {
+      const assignmentRepo = await repo(Assignment);
+      await assignmentRepo.update(
+        { id: assignmentId, deviceId: auth.deviceId },
+        { status: AssignmentStatus.DONE, completedAt: now },
+      );
+    }
 
-  return NextResponse.json({
-    stations: current.length,
-    seen: seenIds.size,
-    newEvents,
-    newCupets,
-    complete,
-  });
+    return NextResponse.json({
+      stations: current.length,
+      seen: seenIds.size,
+      newEvents,
+      newCupets,
+      complete,
+    });
   } catch (err) {
-    process.stderr.write(`[ingest/catalog] ${String(err)}\n`);
-    return NextResponse.json({ error: "ingest_failed", message: String(err) }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[ingest/catalog] ${message}\n`);
+    return NextResponse.json({ error: "ingest_failed", message }, { status: 500 });
   }
 }
