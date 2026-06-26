@@ -116,12 +116,15 @@ export async function insertStationSnapshots(
   }
 }
 
-export async function loadConfirmedStationPrior(): Promise<
-  Map<
-    number,
-    { id: number; admiteSalaEspera: boolean; disponibilidades: number; active: boolean; provinceName: string }
-  >
-> {
+type StationPriorRow = {
+  id: number;
+  admiteSalaEspera: boolean;
+  disponibilidades: number;
+  active: boolean;
+  provinceName: string;
+};
+
+export async function loadConfirmedStationPrior(): Promise<Map<number, StationPriorRow>> {
   const ds = await db();
   const rows = (await ds.query(
     `SELECT s.id, s."detAdmiteSalaEspera", s."detDisponibilidades", s.active, p.name AS "provinceName"
@@ -136,10 +139,7 @@ export async function loadConfirmedStationPrior(): Promise<
     provinceName: string;
   }>;
 
-  const prior = new Map<
-    number,
-    { id: number; admiteSalaEspera: boolean; disponibilidades: number; active: boolean; provinceName: string }
-  >();
+  const prior = new Map<number, StationPriorRow>();
   for (const s of rows) {
     prior.set(s.id, {
       id: s.id,
@@ -150,6 +150,13 @@ export async function loadConfirmedStationPrior(): Promise<
     });
   }
   return prior;
+}
+
+/** Any station row ever ingested — used to suppress false NEW on partial flushes. */
+export async function loadKnownStationIds(): Promise<Set<number>> {
+  const ds = await db();
+  const rows = (await ds.query(`SELECT id FROM "Station"`)) as Array<{ id: number }>;
+  return new Set(rows.map((r) => r.id));
 }
 
 /** Mark existing active stations as baseline so only future discoveries are NEW. */

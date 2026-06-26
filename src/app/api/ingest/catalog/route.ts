@@ -11,6 +11,7 @@ import {
   deactivateUnseenStations,
   insertStationSnapshots,
   loadConfirmedStationPrior,
+  loadKnownStationIds,
 } from "@/lib/ingest-stations";
 import { notifyMobileDevices } from "@/lib/device-notify";
 import {
@@ -93,28 +94,37 @@ export async function POST(req: Request): Promise<Response> {
       provinceRows.map((p) => [p.name.trim().toUpperCase(), p.id]),
     );
 
+    const mappableCurrent = current.filter(
+      (s) => provinceMap.get(s.provinceName.trim().toUpperCase()) !== undefined,
+    );
+    const seenIds = new Set(mappableCurrent.map((s) => s.id));
+
     const priorRaw = await loadConfirmedStationPrior();
     const prior = new Map<number, PriorStationState>(priorRaw);
+    const knownStationIds = await loadKnownStationIds();
 
-    const isFirstSweep = prior.size === 0;
-    const arrivalDrafts =
-      complete && !isFirstSweep ? detect({ prior, current }) : [];
+    const [baseline] = (await dataSource.query(
+      `SELECT EXISTS(SELECT 1 FROM "Station" WHERE confirmed = true) AS ready`,
+    )) as Array<{ ready: boolean }>;
+    const isFirstSweep = !baseline?.ready;
+    const rawArrivals =
+      complete && !isFirstSweep ? detect({ prior, current: mappableCurrent }) : [];
+    const arrivalDrafts = rawArrivals.filter(
+      (d) => !(d.type === "NEW" && knownStationIds.has(d.stationId)),
+    );
     const departureDrafts =
       complete && !isFirstSweep
-        ? detectDepartures(prior, new Set(current.map((s) => s.id)))
+        ? detectDepartures(prior, seenIds)
         : [];
     const eventDrafts = [...arrivalDrafts, ...departureDrafts];
     const eventSummary = summarizeDetectionEvents(eventDrafts);
 
-    const seenIds = new Set<number>();
     const now = new Date();
     const BATCH = 50;
     const upsertBatch: Parameters<typeof upsertStationRows>[0] = [];
 
-    for (const station of current) {
-      const provinceId = provinceMap.get(station.provinceName.trim().toUpperCase());
-      if (provinceId === undefined) continue;
-      seenIds.add(station.id);
+    for (const station of mappableCurrent) {
+      const provinceId = provinceMap.get(station.provinceName.trim().toUpperCase())!;
       upsertBatch.push({ station, provinceId, complete });
     }
 
@@ -184,7 +194,7 @@ export async function POST(req: Request): Promise<Response> {
       }
     }
 
-    if (assignmentId) {
+    if (assignmentId && complete) {
       await dataSource.query(
         `UPDATE "Assignment" SET status = $1, "completedAt" = $2
          WHERE id = $3 AND "deviceId" = $4

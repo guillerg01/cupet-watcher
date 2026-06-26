@@ -34,6 +34,9 @@ const schema = z.object({
   WORKER_CHECK_CRON: z.string().default("*/5 * * * *"),
   PREDICT_CRON: z.string().default("0 */6 * * *"),
   FCM_SERVER_KEY: z.string().optional().default(""),
+  // Shared secret for the external cron pinger that drives the coordinator on
+  // Render free (no always-on worker). Empty disables the endpoint.
+  CRON_SECRET: z.string().optional().default(""),
 });
 
 export const env = schema.parse(process.env);

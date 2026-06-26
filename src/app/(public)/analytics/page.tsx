@@ -43,7 +43,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps): Promis
       <section className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-3">
         <StatCard label="Estaciones" value={stats.totalActive} />
         <StatCard label="Disponibles" value={stats.withAvailability} accent border="var(--brand-border)" />
-        <StatCard label="Nuevos (7d)" value={stats.recentNew} border="var(--accent-border)" />
+        <StatCard label="Nuevos en listado (7d)" value={stats.recentNew} border="var(--accent-border)" />
         <StatCard label="Visitas" value={stats.totalViews} />
         <StatCard label="Workers" value={stats.onlineWorkers} />
         <StatCard label="Sin cupo" value={stats.withoutAvailability} />

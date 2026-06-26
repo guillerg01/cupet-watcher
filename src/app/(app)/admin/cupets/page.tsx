@@ -1,5 +1,7 @@
 import { requireAdmin } from "@/lib/admin";
 import { db } from "@/infra/db";
+import { getDetectionCounts, DETECTION_WINDOW_MS } from "@/lib/detection-stats";
+import { NEW_VIEWS_THRESHOLD } from "@/lib/cupet-catalog";
 import StatCard from "@/components/StatCard";
 
 export const dynamic = "force-dynamic";
@@ -11,23 +13,45 @@ interface CupetRow {
   provinceName: string | null;
   municipio: string | null;
   disponibilidades: number;
+  views: number | null;
   active: boolean;
   confirmed: boolean;
+  listChange: "NEW" | "REAPPEARED" | null;
+  isNew: boolean;
   lastSeenAt: string | null;
 }
 
 export default async function AdminCupetsPage(): Promise<React.JSX.Element> {
   await requireAdmin();
   const ds = await db();
+  const detection = await getDetectionCounts();
+  const weekAgo = new Date(Date.now() - DETECTION_WINDOW_MS);
 
-  const rows = (await ds.query(`
+  // "Nuevo" = última detección NEW/REAPPEARED en la ventana, O menos de
+  // NEW_VIEWS_THRESHOLD vistas (cupet recién publicado, casi sin tráfico).
+  const newExpr = `(lc.type IS NOT NULL OR COALESCE(ss.views, NULLIF(s."detailCache"->>'views','')::int) < ${NEW_VIEWS_THRESHOLD})`;
+  const rows = (await ds.query(
+    `
     SELECT s.id, s.name, s.establishment, p.name AS "provinceName", s.municipio,
-           s.disponibilidades, s.active, s.confirmed, s."lastSeenAt"
+           s.disponibilidades, s.active, s.confirmed, s."lastSeenAt",
+           COALESCE(ss.views, NULLIF(s."detailCache"->>'views','')::int) AS views,
+           lc.type AS "listChange",
+           ${newExpr} AS "isNew"
     FROM "Station" s
     LEFT JOIN "Province" p ON p.id = s."provinceId"
-    ORDER BY s.active DESC, s.disponibilidades DESC, s."lastSeenAt" DESC NULLS LAST
+    LEFT JOIN LATERAL (
+      SELECT views FROM "StationSnapshot" WHERE "stationId" = s.id ORDER BY ts DESC LIMIT 1
+    ) ss ON true
+    LEFT JOIN LATERAL (
+      SELECT e.type FROM "DetectionEvent" e
+      WHERE e."stationId" = s.id AND e.type IN ('NEW', 'REAPPEARED') AND e."detectedAt" > $1
+      ORDER BY e."detectedAt" DESC LIMIT 1
+    ) lc ON true
+    ORDER BY ${newExpr} DESC, s.active DESC, s.disponibilidades DESC, s."lastSeenAt" DESC NULLS LAST
     LIMIT 500
-  `)) as CupetRow[];
+  `,
+    [weekAgo],
+  )) as CupetRow[];
 
   const [counts] = (await ds.query(`
     SELECT
@@ -54,8 +78,30 @@ export default async function AdminCupetsPage(): Promise<React.JSX.Element> {
         <StatCard label="Sin confirmar" value={counts?.unconfirmed ?? 0} />
       </div>
 
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <StatCard
+          label="Nuevos en listado (7d)"
+          value={detection.newStations7d}
+          accent={detection.newStations7d > 0}
+        />
+        <StatCard
+          label="Cambios catálogo (7d)"
+          value={detection.listChangeStations7d}
+        />
+        <StatCard
+          label="Eventos NEW (7d)"
+          value={detection.newEvents7d}
+        />
+      </div>
+
+      <p className="text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
+        <strong style={{ color: "var(--text)" }}>Sin confirmar</strong> = vistos en barrido parcial, no son
+        descubrimientos. <strong style={{ color: "var(--text)" }}>Nuevos en listado</strong> = detecciones NEW
+        distintas (7 días). El último barrido puede decir &quot;sin cambios&quot; aunque acá haya eventos viejos.
+      </p>
+
       <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-        Mostrando {rows.length} cupets (máx 500) · ordenados por activos y disponibilidad
+        Mostrando {rows.length} cupets (máx 500) · nuevos primero, luego activos y disponibilidad
       </p>
 
       <div className="overflow-x-auto rounded-xl" style={{ border: "1px solid var(--border)" }}>
@@ -80,8 +126,25 @@ export default async function AdminCupetsPage(): Promise<React.JSX.Element> {
               rows.map((s) => (
                 <tr key={s.id} style={{ borderTop: "1px solid var(--border)" }}>
                   <td className="p-3" style={{ color: "var(--text)" }}>
-                    <div style={{ fontWeight: 600 }}>{s.name}</div>
-                    <div className="text-xs" style={{ color: "var(--text-muted)" }}>{s.establishment}</div>
+                    <div className="flex items-center gap-2">
+                      <span style={{ fontWeight: 600 }}>{s.name}</span>
+                      {s.isNew && (
+                        <span
+                          className="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                          style={{
+                            background: "rgba(244,163,64,0.15)",
+                            color: "#F4A340",
+                            border: "1px solid rgba(244,163,64,0.4)",
+                          }}
+                        >
+                          NUEVO
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+                      {s.establishment}
+                      {s.views != null && ` · ${s.views.toLocaleString("es")} vistas`}
+                    </div>
                   </td>
                   <td className="p-3" style={{ color: "var(--text-muted)" }}>{s.provinceName ?? "—"}</td>
                   <td className="p-3" style={{ color: "var(--text-muted)" }}>{s.municipio ?? "—"}</td>
@@ -99,7 +162,7 @@ export default async function AdminCupetsPage(): Promise<React.JSX.Element> {
                       {s.active ? "activo" : "inactivo"}
                     </span>
                     {!s.confirmed && (
-                      <span className="ml-1 text-xs" style={{ color: "#F4A340" }}>nuevo</span>
+                      <span className="ml-1 text-xs" style={{ color: "#8B9CB4" }}>parcial</span>
                     )}
                   </td>
                   <td className="p-3 whitespace-nowrap text-xs" style={{ color: "var(--text-muted)" }}>

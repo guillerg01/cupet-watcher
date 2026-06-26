@@ -1,10 +1,16 @@
 import { db } from "@/infra/db";
+import { DETECTION_WINDOW_MS, getDetectionCounts } from "@/lib/detection-stats";
 
 export interface CupetStats {
   totalActive: number;
   withAvailability: number;
   withoutAvailability: number;
+  /** Distinct stations with a NEW detection in the last 7 days. */
   recentNew: number;
+  /** Active stations flagged NEW or REAPPEARED in the catalog (last 7 days). */
+  recentListChanges: number;
+  /** Stations not yet confirmed by a complete sweep — not new discoveries. */
+  unconfirmedStations: number;
   totalViews: number;
   onlineWorkers: number;
   devicesWatching: number;
@@ -29,8 +35,9 @@ export interface CupetStats {
 
 export async function getCupetStats(provinceId: number | null = null): Promise<CupetStats> {
   const ds = await db();
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const weekAgo = new Date(Date.now() - DETECTION_WINDOW_MS);
   const onlineSince = new Date(Date.now() - 5 * 60 * 1000);
+  const detection = await getDetectionCounts(provinceId, weekAgo);
 
   const stationWhere =
     provinceId != null && !Number.isNaN(provinceId)
@@ -72,14 +79,6 @@ export async function getCupetStats(provinceId: number | null = null): Promise<C
      ) latest ON true
      WHERE ${stationWhere}`,
   )) as Array<{ totalViews: number }>;
-
-  const [recentRow] = (await ds.query(
-    `SELECT COUNT(*)::int AS "recentNew"
-     FROM "DetectionEvent" e
-     WHERE e."detectedAt" > $1 AND e.type = 'NEW'
-     ${provinceId != null && !Number.isNaN(provinceId) ? `AND e."provinceId" = ${provinceId}` : ""}`,
-    [weekAgo],
-  )) as Array<{ recentNew: number }>;
 
   const [workersRow] = (await ds.query(
     `SELECT COUNT(*)::int AS "onlineWorkers"
@@ -135,7 +134,9 @@ export async function getCupetStats(provinceId: number | null = null): Promise<C
     totalActive,
     withAvailability,
     withoutAvailability: totalActive - withAvailability,
-    recentNew: recentRow?.recentNew ?? 0,
+    recentNew: detection.newStations7d,
+    recentListChanges: detection.listChangeStations7d,
+    unconfirmedStations: detection.unconfirmedStations,
     totalViews: viewsRow?.totalViews ?? 0,
     onlineWorkers: workersRow?.onlineWorkers ?? 0,
     devicesWatching,
