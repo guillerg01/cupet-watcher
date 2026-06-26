@@ -46,21 +46,22 @@ const schema = z.object({
  * Upserts fuel stations, runs the pure detect() diff, emits DetectionEvents.
  */
 export async function POST(req: Request): Promise<Response> {
-  const auth = deviceFromRequest(req);
-  if (!auth) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  try {
+    const auth = deviceFromRequest(req);
+    if (!auth) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
 
-  const body = await req.json().catch(() => null);
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "invalid_body", detail: parsed.error.flatten() },
-      { status: 400 },
-    );
-  }
+    const body = await req.json().catch(() => null);
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "invalid_body", detail: parsed.error.flatten() },
+        { status: 400 },
+      );
+    }
 
-  const { assignmentId, complete, provinces, stations } = parsed.data;
+    const { assignmentId, complete, provinces, stations } = parsed.data;
   const current: FuelStation[] = stations.map((s) => ({
     id: s.id,
     name: s.name,
@@ -183,6 +184,16 @@ export async function POST(req: Request): Promise<Response> {
 
   const eventRepo = await repo(DetectionEvent);
   let newEvents = 0;
+  const newCupets: Array<{
+    stationId: number;
+    name: string;
+    provinceId: number;
+    provinceName: string;
+    type: string;
+  }> = [];
+
+  const stationNameById = new Map(current.map((s) => [s.id, s.name]));
+
   for (const draft of eventDrafts) {
     const provinceId = provinceMap.get(draft.provinceName.trim().toUpperCase());
     if (provinceId === undefined) continue;
@@ -194,6 +205,15 @@ export async function POST(req: Request): Promise<Response> {
         notified: false,
       });
       newEvents++;
+      if (draft.type === DetectionType.NEW) {
+        newCupets.push({
+          stationId: draft.stationId,
+          name: stationNameById.get(draft.stationId) ?? `Cupet #${draft.stationId}`,
+          provinceId,
+          provinceName: draft.provinceName,
+          type: draft.type,
+        });
+      }
     } catch {
       // duplicate / constraint — ignore
     }
@@ -211,6 +231,11 @@ export async function POST(req: Request): Promise<Response> {
     stations: current.length,
     seen: seenIds.size,
     newEvents,
+    newCupets,
     complete,
   });
+  } catch (err) {
+    process.stderr.write(`[ingest/catalog] ${String(err)}\n`);
+    return NextResponse.json({ error: "ingest_failed", message: String(err) }, { status: 500 });
+  }
 }
