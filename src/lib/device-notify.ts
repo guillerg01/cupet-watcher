@@ -1,8 +1,15 @@
-import { repo, Device } from "@/infra/db";
+import { db } from "@/infra/db";
 import { sendExpoPush } from "@/infra/push/expo";
 import { appendToQueue, newPendingPush } from "@/lib/push-queue";
 
-function deviceWatchesProvince(device: Device, provinceId: number): boolean {
+type DeviceRow = {
+  id: string;
+  pushToken: string | null;
+  watchProvinceIds: number[] | null;
+  pendingPushQueue: Array<{ id: string; title: string; body: string; createdAt: string }> | null;
+};
+
+function deviceWatchesProvince(device: DeviceRow, provinceId: number): boolean {
   const watch = device.watchProvinceIds ?? [];
   if (watch.length === 0) return true;
   return watch.includes(provinceId);
@@ -13,8 +20,11 @@ export async function notifyMobileDevices(input: {
   body: string;
   provinceId?: number;
 }): Promise<{ devices: number; expoSent: number }> {
-  const deviceRepo = await repo(Device);
-  const devices = await deviceRepo.find({ where: { ticketLinked: true } });
+  const ds = await db();
+  const devices = (await ds.query(
+    `SELECT id, "pushToken", "watchProvinceIds", "pendingPushQueue"
+     FROM "Device" WHERE "ticketLinked" = true`,
+  )) as DeviceRow[];
 
   const targets = devices.filter((d) =>
     input.provinceId == null ? true : deviceWatchesProvince(d, input.provinceId),
@@ -25,7 +35,10 @@ export async function notifyMobileDevices(input: {
   for (const d of targets) {
     const item = newPendingPush(input.title, input.body);
     const queue = appendToQueue(d.pendingPushQueue, item);
-    await deviceRepo.update(d.id, { pendingPushQueue: queue, pendingPush: null });
+    await ds.query(
+      `UPDATE "Device" SET "pendingPushQueue" = $1::jsonb, "pendingPush" = NULL WHERE id = $2`,
+      [JSON.stringify(queue), d.id],
+    );
 
     if (d.pushToken?.startsWith("ExponentPushToken")) {
       expoMessages.push({

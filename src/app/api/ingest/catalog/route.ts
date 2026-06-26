@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { repo, Province, Assignment, AssignmentStatus, DetectionType, db } from "@/infra/db";
+import { AssignmentStatus, DetectionType, db } from "@/infra/db";
 import { newId } from "@/infra/db/id";
 import { deviceFromRequest } from "@/lib/device-auth";
 import { detect } from "@/core/detection/detect";
@@ -66,17 +66,24 @@ export async function POST(req: Request): Promise<Response> {
       views: s.views ?? null,
     }));
 
-    const provinceRepo = await repo(Province);
+    const dataSource = await db();
 
     if (provinces && provinces.length > 0) {
       for (const p of provinces) {
-        await provinceRepo.upsert({ id: p.id, name: p.name.trim() }, ["id"]);
+        await dataSource.query(
+          `INSERT INTO "Province" (id, name) VALUES ($1, $2)
+           ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
+          [p.id, p.name.trim()],
+        );
       }
     }
 
-    const allProvinces = await provinceRepo.find();
+    const provinceRows = (await dataSource.query(`SELECT id, name FROM "Province"`)) as Array<{
+      id: number;
+      name: string;
+    }>;
     const provinceMap = new Map<string, number>(
-      allProvinces.map((p) => [p.name.trim().toUpperCase(), p.id]),
+      provinceRows.map((p) => [p.name.trim().toUpperCase(), p.id]),
     );
 
     const priorRaw = await loadConfirmedStationPrior();
@@ -107,7 +114,6 @@ export async function POST(req: Request): Promise<Response> {
 
     await insertStationSnapshots(current, seenIds);
 
-    const dataSource = await db();
     let newEvents = 0;
     const newCupets: Array<{
       stationId: number;
@@ -159,10 +165,10 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     if (assignmentId) {
-      const assignmentRepo = await repo(Assignment);
-      await assignmentRepo.update(
-        { id: assignmentId, deviceId: auth.deviceId },
-        { status: AssignmentStatus.DONE, completedAt: now },
+      await dataSource.query(
+        `UPDATE "Assignment" SET status = $1, "completedAt" = $2
+         WHERE id = $3 AND "deviceId" = $4`,
+        [AssignmentStatus.DONE, now, assignmentId, auth.deviceId],
       );
     }
 
