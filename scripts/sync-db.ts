@@ -42,7 +42,10 @@ async function ensureDeviceColumns(): Promise<void> {
   await dataSource.query(
     `ALTER TABLE "Device" ADD COLUMN IF NOT EXISTS "pendingPush" jsonb`,
   );
-  process.stdout.write("[sync-db] Device columns OK.\n");
+  await dataSource.query(
+    `ALTER TABLE "AppUser" ADD COLUMN IF NOT EXISTS "lastAlertsSeenAt" timestamptz`,
+  );
+  process.stdout.write("[sync-db] Device/AppUser columns OK.\n");
 }
 
 async function seedAdmin(): Promise<void> {

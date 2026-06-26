@@ -8,6 +8,8 @@ import {
   DetectionType,
 } from "@/infra/db";
 import { sendNewCupetEmail } from "@/infra/email/resend";
+import { sendFcmPush } from "@/infra/push/fcm";
+import { getUsersWithPendingAlerts } from "@/lib/pending-alerts";
 
 function buildPublicLink(stationId: number): string {
   return `https://ticket.xutil.net/store/service-detail?service=${stationId}`;
@@ -28,6 +30,7 @@ export async function runSendNotifications(): Promise<{
   sent: number;
   failed: number;
   events: number;
+  remindersSent: number;
 }> {
   const eventRepo = await repo(DetectionEvent);
   const events = await eventRepo.find({
@@ -107,5 +110,33 @@ export async function runSendNotifications(): Promise<{
     await eventRepo.update(event.id, { notified: true });
   }
 
-  return { sent, failed, events: events.length };
+  // Recurring push reminder: every cron pass, re-notify users who still have
+  // unacknowledged new cupets. Email above fires once per event (deduped by
+  // Notification rows); this push repeats until the user opens the app and
+  // dismisses the modal (which advances lastAlertsSeenAt → no more pending).
+  const { remindersSent } = await runAlertReminders();
+
+  return { sent, failed, events: events.length, remindersSent };
+}
+
+export async function runAlertReminders(): Promise<{ remindersSent: number }> {
+  const users = await getUsersWithPendingAlerts();
+  let remindersSent = 0;
+
+  for (const u of users) {
+    if (u.pushTokens.length === 0) continue;
+    const title = u.count === 1 ? "Cupet nuevo en tu provincia" : `${u.count} cupets nuevos`;
+    const body = "Abrí Cupet Watcher para verlos.";
+    try {
+      const results = await sendFcmPush(u.pushTokens, title, body, {
+        type: "PENDING_ALERTS",
+        count: String(u.count),
+      });
+      remindersSent += results.filter((r) => r.ok).length;
+    } catch {
+      /* best-effort — never block the cron */
+    }
+  }
+
+  return { remindersSent };
 }

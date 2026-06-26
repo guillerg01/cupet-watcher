@@ -42,6 +42,12 @@ export class AppUser {
   @Column({ type: "boolean", default: false })
   notifyWaitroom!: boolean;
 
+  // Last time the user opened the app and dismissed the new-cupets modal.
+  // Pending alerts = NEW/REAPPEARED detections after this timestamp; the cron
+  // keeps re-sending the push reminder until this advances.
+  @Column({ type: "timestamptz", nullable: true })
+  lastAlertsSeenAt!: Date | null;
+
   @OneToMany("UserProvince", "user")
   provinces!: UserProvince[];
 
