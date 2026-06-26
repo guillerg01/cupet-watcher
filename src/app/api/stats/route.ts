@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
-import { deviceFromRequest } from "@/lib/device-auth";
 import { getCupetStats } from "@/lib/cupet-stats";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request): Promise<Response> {
-  if (!deviceFromRequest(req)) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
   const url = new URL(req.url);
   const provinceIdParam = url.searchParams.get("provinceId");
   const provinceId =

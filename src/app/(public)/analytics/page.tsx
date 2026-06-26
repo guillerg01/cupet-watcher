@@ -1,9 +1,10 @@
+import Link from "next/link";
+import { getCupetStats } from "@/lib/cupet-stats";
+import { listProvinces } from "@/lib/cupet-catalog";
 import { db } from "@/infra/db";
 
-interface ProvinceCount {
-  provinceid: number;
-  name: string;
-  total: string;
+interface PageProps {
+  searchParams: Promise<{ provinceId?: string }>;
 }
 
 interface QueueStat {
@@ -12,19 +13,19 @@ interface QueueStat {
   avgfill: number;
 }
 
-export default async function AnalyticsPage(): Promise<React.JSX.Element> {
-  const dataSource = await db();
+export default async function AnalyticsPage({ searchParams }: PageProps): Promise<React.JSX.Element> {
+  const { provinceId: provinceRaw } = await searchParams;
+  const provinceId =
+    provinceRaw != null && provinceRaw !== "" ? Number(provinceRaw) : null;
+  const filterId = provinceId != null && !Number.isNaN(provinceId) ? provinceId : null;
 
-  const [stationsByProvince, queueStats, detectionTrend] = await Promise.all([
-    dataSource.query<ProvinceCount[]>(
-      `
-      SELECT p.id AS provinceid, p.name, COUNT(s.id)::bigint AS total
-      FROM "Province" p
-      LEFT JOIN "Station" s ON s."provinceId" = p.id AND s.active = true
-      GROUP BY p.id, p.name
-      ORDER BY total DESC
-      `,
-    ),
+  const [stats, provinces, dataSource] = await Promise.all([
+    getCupetStats(filterId),
+    listProvinces(),
+    db(),
+  ]);
+
+  const [queueStats, detectionTrend] = await Promise.all([
     dataSource.query<QueueStat[]>(
       `
       SELECT
@@ -35,6 +36,7 @@ export default async function AnalyticsPage(): Promise<React.JSX.Element> {
       JOIN "Station" st ON st.id = ss."stationId"
       WHERE ss.ts > NOW() - INTERVAL '7 days'
         AND ss."queueTotal" > 0
+        ${filterId != null ? `AND st."provinceId" = ${filterId}` : ""}
       GROUP BY ss."stationId", st.name
       HAVING COUNT(*) >= 5
       ORDER BY avgfill ASC
@@ -46,43 +48,99 @@ export default async function AnalyticsPage(): Promise<React.JSX.Element> {
       SELECT DATE_TRUNC('day', "detectedAt") AS day, COUNT(*)::bigint AS count
       FROM "DetectionEvent"
       WHERE "detectedAt" > NOW() - INTERVAL '14 days'
+      ${filterId != null ? `AND "provinceId" = ${filterId}` : ""}
       GROUP BY 1
       ORDER BY 1 ASC
       `,
     ),
   ]);
 
-  const maxStations = Math.max(1, ...stationsByProvince.map((p) => Number(p.total)));
+  const maxProv = Math.max(1, ...stats.byProvince.map((p) => p.total));
   const maxEvents = Math.max(1, ...detectionTrend.map((d) => Number(d.count)));
 
   return (
     <div className="space-y-10">
-      <h1 className="text-2xl font-bold" style={{ color: "var(--text)" }}>
-        Analíticas
-      </h1>
+      <div>
+        <h1 className="text-2xl font-bold" style={{ color: "var(--text)" }}>
+          Analíticas
+        </h1>
+        <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+          Mismos datos que la app móvil — catálogo sincronizado en tiempo real
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href="/analytics"
+          className="px-3 py-1 rounded-full text-xs font-semibold"
+          style={{
+            background: filterId == null ? "var(--brand)" : "var(--surface-2)",
+            color: filterId == null ? "#0f172a" : "var(--text-muted)",
+          }}
+        >
+          Todas
+        </Link>
+        {provinces.map((p) => {
+          const active = filterId === p.id;
+          return (
+            <Link
+              key={p.id}
+              href={`/analytics?provinceId=${p.id}`}
+              className="px-3 py-1 rounded-full text-xs font-semibold"
+              style={{
+                background: active ? "var(--brand)" : "var(--surface-2)",
+                color: active ? "#0f172a" : "var(--text-muted)",
+              }}
+            >
+              {p.name}
+            </Link>
+          );
+        })}
+      </div>
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Activos" value={stats.totalActive} />
+        <StatCard label="Con cupo" value={stats.withAvailability} accent />
+        <StatCard label="Sin cupo" value={stats.withoutAvailability} />
+        <StatCard label="Nuevos (7d)" value={stats.recentNew} accent />
+        <StatCard label="Visitas totales" value={stats.totalViews} />
+        <StatCard label="Workers online" value={stats.onlineWorkers} />
+        {filterId != null && (
+          <StatCard label="Dispositivos vigilando" value={stats.devicesWatching} />
+        )}
+      </section>
 
       <section>
         <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text)" }}>
-          Estaciones por provincia
+          Por provincia
         </h2>
         <div className="space-y-2">
-          {stationsByProvince.map((p) => {
-            const pct = (Number(p.total) / maxStations) * 100;
+          {stats.byProvince.map((p) => {
+            const pct = (p.total / maxProv) * 100;
             return (
-              <div key={p.provinceid} className="flex items-center gap-3">
-                <span className="w-32 text-xs text-right shrink-0 truncate" style={{ color: "var(--text-muted)" }}>
-                  {p.name}
+              <div key={p.provinceId} className="flex items-center gap-3">
+                <span
+                  className="w-32 text-xs text-right shrink-0 truncate"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  {p.provinceName}
                 </span>
-                <div className="flex-1 rounded-full overflow-hidden h-5" style={{ background: "var(--surface-2)" }}>
+                <div
+                  className="flex-1 rounded-full overflow-hidden h-5"
+                  style={{ background: "var(--surface-2)" }}
+                >
                   <div
                     className="h-full rounded-full flex items-center px-2 transition-all"
                     style={{ width: `${Math.max(pct, 4)}%`, background: "var(--brand)" }}
                   >
                     <span className="text-xs font-bold" style={{ color: "#0f172a" }}>
-                      {Number(p.total)}
+                      {p.available}/{p.total}
                     </span>
                   </div>
                 </div>
+                <span className="text-xs w-16 text-right shrink-0" style={{ color: "var(--text-muted)" }}>
+                  {p.views.toLocaleString("es")} v.
+                </span>
               </div>
             );
           })}
@@ -95,7 +153,7 @@ export default async function AnalyticsPage(): Promise<React.JSX.Element> {
             Cola promedio (últimos 7 días)
           </h2>
           <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
-            Ratio posición/total — menor es mejor (menos cola)
+            Ratio posición/total — menor es mejor
           </p>
           <div className="space-y-2">
             {queueStats.map((s) => {
@@ -103,10 +161,16 @@ export default async function AnalyticsPage(): Promise<React.JSX.Element> {
               const hue = Math.round((1 - s.avgfill) * 120);
               return (
                 <div key={s.stationid} className="flex items-center gap-3">
-                  <span className="w-40 text-xs text-right shrink-0 truncate" style={{ color: "var(--text-muted)" }}>
+                  <span
+                    className="w-40 text-xs text-right shrink-0 truncate"
+                    style={{ color: "var(--text-muted)" }}
+                  >
                     {s.stationname}
                   </span>
-                  <div className="flex-1 rounded-full overflow-hidden h-4" style={{ background: "var(--surface-2)" }}>
+                  <div
+                    className="flex-1 rounded-full overflow-hidden h-4"
+                    style={{ background: "var(--surface-2)" }}
+                  >
                     <div
                       className="h-full rounded-full"
                       style={{
@@ -158,6 +222,36 @@ export default async function AnalyticsPage(): Promise<React.JSX.Element> {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: number;
+  accent?: boolean;
+}): React.JSX.Element {
+  return (
+    <div
+      className="rounded-xl p-4"
+      style={{
+        background: accent ? "var(--brand)" : "var(--surface)",
+        border: accent ? "none" : "1px solid var(--border)",
+      }}
+    >
+      <p className="text-xs font-semibold" style={{ color: accent ? "#0f172a" : "var(--text-muted)" }}>
+        {label}
+      </p>
+      <p
+        className="text-2xl font-black mt-1"
+        style={{ color: accent ? "#0f172a" : "var(--text)" }}
+      >
+        {value.toLocaleString("es")}
+      </p>
     </div>
   );
 }
