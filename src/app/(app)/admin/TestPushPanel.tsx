@@ -4,6 +4,8 @@ import { useState } from "react";
 
 interface PushResult {
   queued: number;
+  devices: number;
+  perDevice: number;
   expoSent: number;
   expoTotal: number;
   message: string;
@@ -74,7 +76,8 @@ export default function TestPushPanel(): React.JSX.Element {
         >
           <p>{result.message}</p>
           <p style={{ color: "var(--text-muted)" }}>
-            Dispositivos marcados: {result.queued} · Expo push: {result.expoSent}/{result.expoTotal}
+            Cola: {result.queued} en {result.devices} dispositivo(s) · Expo: {result.expoSent}/
+            {result.expoTotal}
           </p>
         </div>
       )}

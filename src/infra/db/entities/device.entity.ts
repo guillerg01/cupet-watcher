@@ -48,6 +48,9 @@ export class Device {
   pendingPush!: { title: string; body: string } | null;
 
   @Column({ type: "jsonb", default: () => "'[]'" })
+  pendingPushQueue!: Array<{ id: string; title: string; body: string; createdAt: string }>;
+
+  @Column({ type: "jsonb", default: () => "'[]'" })
   watchProvinceIds!: number[];
 
   @CreateDateColumn({ type: "timestamptz" })

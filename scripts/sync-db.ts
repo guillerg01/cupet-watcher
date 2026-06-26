@@ -1,8 +1,22 @@
 import "@/load-env";
 import "reflect-metadata";
 import bcrypt from "bcryptjs";
-import { syncSchema, repo, AppUser, UserRole } from "@/infra/db";
+import { syncSchema, repo, AppUser, UserRole, db } from "@/infra/db";
 import { env } from "@/env";
+
+async function ensureDeviceColumns(): Promise<void> {
+  const dataSource = await db();
+  await dataSource.query(
+    `ALTER TABLE "Device" ADD COLUMN IF NOT EXISTS "pendingPushQueue" jsonb NOT NULL DEFAULT '[]'`,
+  );
+  await dataSource.query(
+    `ALTER TABLE "Device" ADD COLUMN IF NOT EXISTS "watchProvinceIds" jsonb NOT NULL DEFAULT '[]'`,
+  );
+  await dataSource.query(
+    `ALTER TABLE "Device" ADD COLUMN IF NOT EXISTS "pendingPush" jsonb`,
+  );
+  process.stdout.write("[sync-db] Device columns OK.\n");
+}
 
 async function seedAdmin(): Promise<void> {
   const email = env.ADMIN_EMAIL?.trim().toLowerCase();
@@ -39,6 +53,7 @@ async function seedAdmin(): Promise<void> {
 }
 
 syncSchema()
+  .then(() => ensureDeviceColumns())
   .then(() => seedAdmin())
   .then(() => process.stdout.write("[sync-db] Done.\n"))
   .catch((err) => {

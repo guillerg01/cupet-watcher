@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Not, In } from "typeorm";
 import {
-  db,
   repo,
   Province,
   Station,
@@ -117,45 +116,43 @@ export async function POST(req: Request): Promise<Response> {
 
   const seenIds = new Set<number>();
   const now = new Date();
-  const dataSource = await db();
   const BATCH = 50;
+  const existingIdSet = new Set(
+    (await stationRepo.find({ select: { id: true } })).map((s) => s.id),
+  );
 
   for (let i = 0; i < current.length; i += BATCH) {
     const batch = current.slice(i, i + BATCH);
-    await dataSource.transaction(async (manager) => {
-      const txStationRepo = manager.getRepository(Station);
-      for (const station of batch) {
-        const provinceId = provinceMap.get(station.provinceName.trim().toUpperCase());
-        if (provinceId === undefined) continue;
-        seenIds.add(station.id);
+    for (const station of batch) {
+      const provinceId = provinceMap.get(station.provinceName.trim().toUpperCase());
+      if (provinceId === undefined) continue;
+      seenIds.add(station.id);
 
-        const existing = await txStationRepo.findOne({ where: { id: station.id } });
-        const common = {
-          name: station.name,
-          establishment: station.establishment,
-          provinceId,
-          municipio: station.municipio,
-          admiteSalaEspera: station.admiteSalaEspera,
-          tieneValidacion: station.tieneValidacion,
-          disponibilidades: station.disponibilidades,
-          active: true,
-          lastSeenAt: now,
-          // Advance the detection baseline only on a complete sweep.
-          ...(complete
-            ? {
-                detDisponibilidades: station.disponibilidades,
-                detAdmiteSalaEspera: station.admiteSalaEspera,
-                confirmed: true,
-              }
-            : {}),
-        };
-        if (existing) {
-          await txStationRepo.update(station.id, common);
-        } else {
-          await txStationRepo.save({ id: station.id, ...common, firstSeenAt: now });
-        }
+      const common = {
+        name: station.name,
+        establishment: station.establishment,
+        provinceId,
+        municipio: station.municipio,
+        admiteSalaEspera: station.admiteSalaEspera,
+        tieneValidacion: station.tieneValidacion,
+        disponibilidades: station.disponibilidades,
+        active: true,
+        lastSeenAt: now,
+        ...(complete
+          ? {
+              detDisponibilidades: station.disponibilidades,
+              detAdmiteSalaEspera: station.admiteSalaEspera,
+              confirmed: true,
+            }
+          : {}),
+      };
+      if (existingIdSet.has(station.id)) {
+        await stationRepo.update(station.id, common);
+      } else {
+        existingIdSet.add(station.id);
+        await stationRepo.save({ id: station.id, ...common, firstSeenAt: now });
       }
-    });
+    }
   }
 
   // Only deactivate unseen stations when the phone reports a COMPLETE sweep —
