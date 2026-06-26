@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
+import { IconGasStation, IconLock, IconMail } from "@tabler/icons-react";
 
 export default function LoginPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
@@ -38,64 +39,58 @@ export default function LoginPage(): React.JSX.Element {
   }
 
   return (
-    <main className="min-h-dvh flex items-center justify-center px-4" style={{ background: "var(--bg)" }}>
-      <div
-        className="w-full max-w-sm rounded-2xl p-8 space-y-6"
-        style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow)" }}
-      >
+    <main className="flex min-h-dvh items-center justify-center px-4" style={{ background: "var(--bg)" }}>
+      <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
-          <h1 className="text-xl font-bold" style={{ color: "var(--text)" }}>
+          <div
+            className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl"
+            style={{ background: "var(--brand)" }}
+          >
+            <IconGasStation size={28} stroke={1.75} style={{ color: "var(--brand-dark)" }} />
+          </div>
+          <h1 className="text-2xl font-bold" style={{ color: "var(--text)" }}>
             Iniciar sesión
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
             Entrá con tu cuenta de Cupet Watcher
           </p>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text)" }}>
+        <form onSubmit={onSubmit} className="cw-card space-y-3 p-5">
+          <label className="block">
+            <span className="mb-1.5 flex items-center gap-2 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+              <IconMail size={14} stroke={1.75} />
               Email
-            </label>
+            </span>
             <input
               type="email"
               name="email"
               required
               autoComplete="email"
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2"
-              style={{
-                background: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-              }}
+              className="cw-input w-full px-3 py-2.5 text-sm outline-none focus:border-[color:var(--brand-border)]"
             />
-          </div>
+          </label>
 
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--text)" }}>
+          <label className="block">
+            <span className="mb-1.5 flex items-center gap-2 text-xs font-semibold" style={{ color: "var(--text-muted)" }}>
+              <IconLock size={14} stroke={1.75} />
               Contraseña
-            </label>
+            </span>
             <input
               type="password"
               name="password"
               required
               autoComplete="current-password"
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2"
-              style={{
-                background: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-              }}
+              className="cw-input w-full px-3 py-2.5 text-sm outline-none focus:border-[color:var(--brand-border)]"
             />
-          </div>
+          </label>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm" style={{ color: "var(--danger)" }}>{error}</p>}
 
           <button
             type="submit"
             disabled={pending}
-            className="w-full py-2.5 rounded-lg font-semibold text-sm transition-all disabled:opacity-60"
-            style={{ background: "var(--brand)", color: "#0f172a" }}
+            className="cw-btn-primary w-full py-3 text-sm disabled:opacity-60"
           >
             {pending ? "Entrando..." : "Entrar"}
           </button>

@@ -11,6 +11,7 @@ import {
 } from "@/infra/db";
 import StatCard from "@/components/StatCard";
 import TestPushPanel from "./TestPushPanel";
+import TestEmailPanel from "./TestEmailPanel";
 import ScanIntervalPanel from "./ScanIntervalPanel";
 import Link from "next/link";
 
@@ -58,6 +59,8 @@ export default async function AdminOverviewPage(): Promise<React.JSX.Element> {
       <ScanIntervalPanel />
 
       <TestPushPanel />
+
+      <TestEmailPanel />
 
       <section>
         <div className="flex items-center justify-between mb-3">

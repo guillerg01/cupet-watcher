@@ -18,8 +18,8 @@ export default function AdminNav(): React.JSX.Element {
 
   return (
     <div
-      className="flex flex-wrap gap-2 pb-4 mb-6"
-      style={{ borderBottom: "1px solid var(--border)" }}
+      className="mb-6 flex flex-wrap gap-2 border-b pb-4"
+      style={{ borderColor: "var(--border-soft)" }}
     >
       {LINKS.map((l) => {
         const active = l.exact ? currentPath === l.href : currentPath.startsWith(l.href);
@@ -27,11 +27,11 @@ export default function AdminNav(): React.JSX.Element {
           <Link
             key={l.href}
             href={l.href}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            className="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
             style={{
-              background: active ? "var(--brand)" : "var(--surface)",
-              color: active ? "#0f172a" : "var(--text-muted)",
-              border: active ? "none" : "1px solid var(--border)",
+              background: active ? "var(--brand-fill)" : "var(--surface)",
+              color: active ? "var(--brand)" : "var(--text-muted)",
+              border: `1px solid ${active ? "var(--brand-border)" : "var(--border-soft)"}`,
             }}
           >
             {l.label}

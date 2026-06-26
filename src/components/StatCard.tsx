@@ -3,35 +3,33 @@ interface StatCardProps {
   value: string | number;
   sub?: string;
   accent?: boolean;
+  border?: string;
 }
 
-export default function StatCard({ label, value, sub, accent }: StatCardProps): React.JSX.Element {
+export default function StatCard({
+  label,
+  value,
+  sub,
+  accent,
+  border,
+}: StatCardProps): React.JSX.Element {
+  const text = typeof value === "number" ? value.toLocaleString("es") : value;
   return (
     <div
-      className="rounded-xl p-4 flex flex-col gap-1"
-      style={{
-        background: accent ? "var(--brand)" : "var(--surface)",
-        border: accent ? "none" : "1px solid var(--border)",
-        boxShadow: "var(--shadow)",
-      }}
+      className="cw-card flex min-w-0 flex-col gap-1 p-4"
+      style={border ? { borderColor: border } : undefined}
     >
       <span
-        className="text-xs font-semibold uppercase tracking-wide"
-        style={{ color: accent ? "#92400e" : "var(--text-muted)" }}
+        className="cw-mono truncate text-xl font-bold"
+        style={{ color: accent ? "var(--brand)" : "var(--text)" }}
       >
+        {text}
+      </span>
+      <span className="text-[10px]" style={{ color: "var(--text-muted-2)" }}>
         {label}
       </span>
-      <span
-        className="text-3xl font-bold"
-        style={{ color: accent ? "#0f172a" : "var(--text)" }}
-      >
-        {value}
-      </span>
       {sub && (
-        <span
-          className="text-xs"
-          style={{ color: accent ? "#78350f" : "var(--text-muted)" }}
-        >
+        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
           {sub}
         </span>
       )}

@@ -1,17 +1,30 @@
 @import "tailwindcss";
 
 :root {
-  --brand: #f59e0b;
-  --brand-dark: #d97706;
-  --brand-light: #fef3c7;
-  --bg: #0f172a;
-  --surface: #1e293b;
-  --surface-2: #334155;
-  --text: #f1f5f9;
-  --text-muted: #94a3b8;
-  --border: #334155;
-  --radius: 0.75rem;
-  --shadow: 0 4px 24px 0 rgba(0,0,0,0.4);
+  --bg: #0b0f14;
+  --nav-bg: #090d14;
+  --surface: #141b24;
+  --surface-2: #1c2537;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-soft: rgba(255, 255, 255, 0.04);
+  --text: #edf2f7;
+  --text-muted: #8b9cb4;
+  --text-muted-2: #526175;
+  --text-faint: #3d4e60;
+  --brand: #1fd6a6;
+  --brand-dark: #0b0f14;
+  --danger: #e05252;
+  --accent: #f4a340;
+  --brand-fill: rgba(31, 214, 166, 0.12);
+  --brand-border: rgba(31, 214, 166, 0.3);
+  --accent-fill: rgba(244, 163, 64, 0.12);
+  --accent-border: rgba(244, 163, 64, 0.3);
+  --danger-fill: rgba(224, 82, 82, 0.08);
+  --danger-border: rgba(224, 82, 82, 0.2);
+  --muted-fill: rgba(139, 156, 180, 0.1);
+  --muted-border: rgba(139, 156, 180, 0.2);
+  --radius: 0.875rem;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
 }
 
 html {
@@ -31,5 +44,45 @@ body {
 
 ::selection {
   background: var(--brand);
-  color: #0f172a;
+  color: var(--brand-dark);
+}
+
+.cw-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 1rem;
+}
+
+.cw-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 0.75rem;
+}
+
+.cw-btn-primary {
+  background: var(--brand);
+  color: var(--brand-dark);
+  border-radius: 0.875rem;
+  font-weight: 700;
+}
+
+.cw-btn-outline {
+  background: transparent;
+  border: 1.5px solid var(--brand-border);
+  color: var(--brand);
+  border-radius: 0.875rem;
+  font-weight: 600;
+}
+
+.cw-section-label {
+  color: var(--text-faint);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.cw-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }

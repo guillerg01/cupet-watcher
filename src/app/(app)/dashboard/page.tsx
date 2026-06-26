@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { IconBell, IconMapPin, IconGasStation } from "@tabler/icons-react";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { In } from "typeorm";
@@ -5,7 +7,6 @@ import { db, repo, UserProvince, DetectionEvent, Station } from "@/infra/db";
 import StatCard from "@/components/StatCard";
 import StationCard from "@/components/StationCard";
 import EmptyState from "@/components/EmptyState";
-import Link from "next/link";
 
 interface StationWithLatest {
   id: number;
@@ -32,7 +33,7 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
   if (provinceIds.length === 0) {
     return (
       <EmptyState
-        icon="📍"
+        icon={IconMapPin}
         title="No tenés provincias configuradas"
         description="Seleccioná las provincias en las que tenés cuenta de xutil para ver cupets disponibles."
         action={
@@ -91,14 +92,14 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold" style={{ color: "var(--text)" }}>
-          Hola, {session.user.name ?? "usuario"} 👋
+          Hola, {session.user.name ?? "usuario"}
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
           {provinceIds.length} provincia{provinceIds.length !== 1 ? "s" : ""} monitoreada{provinceIds.length !== 1 ? "s" : ""}
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <StatCard label="Disponibles ahora" value={availCount} accent={availCount > 0} />
         <StatCard label="Estaciones activas" value={totalStations} />
         <StatCard label="Eventos recientes" value={recentEvents.length} sub="últimas detecciones" />
@@ -109,7 +110,7 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
           Estaciones con disponibilidad
         </h2>
         {availableStations.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-2">
             {availableStations.map((s) => (
               <StationCard
                 key={s.id}
@@ -124,7 +125,7 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
           </div>
         ) : (
           <EmptyState
-            icon="⛽"
+            icon={IconGasStation}
             title="Sin disponibilidad ahora mismo"
             description="Te notificaremos cuando aparezca algo en tus provincias."
           />
@@ -140,11 +141,13 @@ export default async function DashboardPage(): Promise<React.JSX.Element> {
             {recentEvents.map((ev) => (
               <div
                 key={ev.id}
-                className="flex items-center gap-3 p-3 rounded-xl"
-                style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+                className="cw-card flex items-center gap-3 p-3"
               >
-                <span className="text-lg">
-                  {ev.type === "NEW" ? "🆕" : ev.type === "BECAME_AVAILABLE" ? "✅" : "⏳"}
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                  style={{ background: "var(--brand-fill)", color: "var(--brand)" }}
+                >
+                  <IconBell size={16} stroke={1.75} />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate" style={{ color: "var(--text)" }}>

@@ -1,12 +1,18 @@
 import Link from "next/link";
+import { IconChevronRight, IconGasStation } from "@tabler/icons-react";
+import { cupetState } from "@/lib/cupet-state";
+import { Pill } from "@/components/ui";
 
 interface StationCardProps {
   id: number;
   name: string;
-  establishment: string;
+  establishment?: string;
   municipio?: string | null;
+  provinceName?: string;
   disponibilidades: number;
   admiteSalaEspera: boolean;
+  confirmed?: boolean;
+  imageUrl?: string | null;
 }
 
 export default function StationCard({
@@ -14,46 +20,55 @@ export default function StationCard({
   name,
   establishment,
   municipio,
+  provinceName,
   disponibilidades,
   admiteSalaEspera,
+  confirmed = true,
+  imageUrl,
 }: StationCardProps): React.JSX.Element {
-  const available = disponibilidades > 0;
+  const { state, label } = cupetState({
+    disponibilidades,
+    admiteSalaEspera,
+    confirmed,
+  });
 
   return (
     <Link
       href={`/stations/${id}`}
-      className="block rounded-xl p-4 transition-all hover:scale-[1.01]"
-      style={{
-        background: "var(--surface)",
-        border: `1px solid ${available ? "var(--brand)" : "var(--border)"}`,
-        boxShadow: "var(--shadow)",
-      }}
+      className="cw-card flex items-center gap-3 p-3.5 transition-colors hover:border-[color:var(--brand-border)]"
+      style={{ borderColor: "var(--border-soft)" }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-semibold text-sm truncate" style={{ color: "var(--text)" }}>
-            {name}
-          </p>
-          <p className="text-xs truncate" style={{ color: "var(--text-muted)" }}>
-            {establishment}
-            {municipio ? ` · ${municipio}` : ""}
-          </p>
-        </div>
-        <span
-          className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full"
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt=""
+          className="h-11 w-11 shrink-0 rounded-[11px] object-cover"
+          style={{ background: "var(--surface-2)" }}
+        />
+      ) : (
+        <div
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] border"
           style={{
-            background: available ? "var(--brand)" : "var(--surface-2)",
-            color: available ? "#0f172a" : "var(--text-muted)",
+            background: "var(--brand-fill)",
+            borderColor: "var(--brand-border)",
+            color: "var(--brand)",
           }}
         >
-          {available ? `${disponibilidades} disp.` : "Sin disp."}
-        </span>
-      </div>
-      {admiteSalaEspera && (
-        <p className="mt-2 text-xs" style={{ color: "var(--brand)" }}>
-          ✓ Sala de espera
-        </p>
+          <IconGasStation size={18} stroke={1.75} />
+        </div>
       )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold" style={{ color: "var(--text)" }}>
+          {name}
+        </p>
+        <p className="truncate text-[11px]" style={{ color: "var(--text-muted-2)" }}>
+          {[municipio, provinceName ?? establishment].filter(Boolean).join(" · ")}
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <Pill state={state} label={label} dot={state !== "new"} />
+        <IconChevronRight size={14} stroke={1.75} style={{ color: "var(--text-faint)" }} />
+      </div>
     </Link>
   );
 }
