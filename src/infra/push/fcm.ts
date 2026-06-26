@@ -1,7 +1,68 @@
+import { JWT } from "google-auth-library";
+
 export interface FcmPushResult {
   ok: boolean;
   status: number;
   error?: string;
+}
+
+// FCM HTTP v1. The legacy `fcm.googleapis.com/fcm/send` + `Authorization: key=`
+// endpoint was shut down by Google on 2024-06-20, so we authenticate with a
+// service-account JWT (OAuth2) and POST one message per token to the v1 API.
+//
+// Config (Render env): FCM_SERVICE_ACCOUNT = the service-account JSON, either
+// raw JSON or base64-encoded. Generate it in Firebase Console → Project
+// Settings → Service accounts → "Generate new private key".
+
+interface ServiceAccount {
+  client_email: string;
+  private_key: string;
+  project_id: string;
+}
+
+const SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
+const ALERT_CHANNEL_ID = "cupet-alerts";
+
+let cached: { sa: ServiceAccount; jwt: JWT } | null = null;
+
+function loadServiceAccount(): ServiceAccount | null {
+  const raw = process.env.FCM_SERVICE_ACCOUNT?.trim();
+  if (!raw) return null;
+  try {
+    const json = raw.startsWith("{")
+      ? raw
+      : Buffer.from(raw, "base64").toString("utf8");
+    const sa = JSON.parse(json) as ServiceAccount;
+    if (!sa.client_email || !sa.private_key || !sa.project_id) return null;
+    // Render stores newlines as the literal "\n" — restore them for the PEM.
+    sa.private_key = sa.private_key.replace(/\\n/g, "\n");
+    return sa;
+  } catch {
+    return null;
+  }
+}
+
+function getClient(): { sa: ServiceAccount; jwt: JWT } | null {
+  if (cached) return cached;
+  const sa = loadServiceAccount();
+  if (!sa) return null;
+  const jwt = new JWT({
+    email: sa.client_email,
+    key: sa.private_key,
+    scopes: [SCOPE],
+  });
+  cached = { sa, jwt };
+  return cached;
+}
+
+/** FCM v1 rejects tokens that are uninstalled/stale — surface so callers can prune. */
+function isUnrecoverable(error?: string): boolean {
+  if (!error) return false;
+  return (
+    error.includes("UNREGISTERED") ||
+    error.includes("NOT_FOUND") ||
+    error.includes("INVALID_ARGUMENT")
+  );
 }
 
 export async function sendFcmPush(
@@ -10,62 +71,70 @@ export async function sendFcmPush(
   body: string,
   data?: Record<string, string>,
 ): Promise<FcmPushResult[]> {
-  const key = process.env.FCM_SERVER_KEY?.trim();
-  if (!key || tokens.length === 0) {
+  if (tokens.length === 0) return [];
+
+  const client = getClient();
+  if (!client) {
     return tokens.map(() => ({ ok: false, status: 0, error: "fcm_not_configured" }));
   }
 
-  const results: FcmPushResult[] = [];
-  const BATCH = 500;
-
-  for (let i = 0; i < tokens.length; i += BATCH) {
-    const batch = tokens.slice(i, i + BATCH);
-    try {
-      const res = await fetch("https://fcm.googleapis.com/fcm/send", {
-        method: "POST",
-        headers: {
-          Authorization: `key=${key}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          registration_ids: batch,
-          notification: {
-            title,
-            body,
-            sound: "default",
-          },
-          data: data ?? { type: "CUPET_ALERT" },
-          priority: "high",
-          android: { priority: "high" },
-        }),
-      });
-
-      const json = (await res.json().catch(() => null)) as {
-        success?: number;
-        failure?: number;
-        results?: Array<{ error?: string }>;
-      } | null;
-
-      const perToken: Array<{ error?: string }> =
-        json?.results ?? batch.map(() => ({} as { error?: string }));
-      for (let j = 0; j < batch.length; j++) {
-        const err = perToken[j]?.error;
-        results.push({
-          ok: res.ok && !err,
-          status: res.status,
-          error: err,
-        });
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      for (let j = 0; j < batch.length; j++) {
-        results.push({ ok: false, status: 0, error: msg });
-      }
-    }
+  const { sa, jwt } = client;
+  let accessToken: string | null | undefined;
+  try {
+    const tok = await jwt.getAccessToken();
+    accessToken = tok.token;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return tokens.map(() => ({ ok: false, status: 0, error: `auth_failed: ${msg}` }));
+  }
+  if (!accessToken) {
+    return tokens.map(() => ({ ok: false, status: 0, error: "no_access_token" }));
   }
 
-  return results;
+  const url = `https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`;
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    "Content-Type": "application/json",
+  };
+
+  // v1 has no multicast — one HTTP call per token. Fire them in parallel.
+  return Promise.all(
+    tokens.map(async (token): Promise<FcmPushResult> => {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            message: {
+              token,
+              notification: { title, body },
+              data: data ?? { type: "CUPET_ALERT" },
+              android: {
+                priority: "HIGH",
+                notification: {
+                  sound: "default",
+                  channel_id: ALERT_CHANNEL_ID,
+                  notification_priority: "PRIORITY_MAX",
+                },
+              },
+            },
+          }),
+        });
+        if (res.ok) return { ok: true, status: res.status };
+        const json = (await res.json().catch(() => null)) as {
+          error?: { status?: string; message?: string };
+        } | null;
+        const error = json?.error?.status ?? json?.error?.message ?? `http_${res.status}`;
+        return { ok: false, status: res.status, error };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return { ok: false, status: 0, error: msg };
+      }
+    }),
+  );
 }
+
+export { isUnrecoverable as isUnrecoverableFcmError };
 
 export function isFcmDeviceToken(token: string): boolean {
   return !token.startsWith("ExponentPushToken");
