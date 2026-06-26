@@ -49,6 +49,19 @@ export class Station {
   @Column({ type: "int", default: 0 })
   disponibilidades!: number;
 
+  // Detection baseline — availability/waitroom as of the last COMPLETE sweep.
+  // Kept separate from the live fields above so partial (every-10-pages) flushes
+  // don't pollute the new-cupet diff. `confirmed` flips true once a station has
+  // been seen in a complete sweep (used for NEW detection).
+  @Column({ type: "int", nullable: true })
+  detDisponibilidades!: number | null;
+
+  @Column({ type: "boolean", default: false })
+  detAdmiteSalaEspera!: boolean;
+
+  @Column({ type: "boolean", default: false })
+  confirmed!: boolean;
+
   @Column({ type: "boolean", default: true })
   active!: boolean;
 

@@ -90,19 +90,29 @@ export async function POST(req: Request): Promise<Response> {
 
   const stationRepo = await repo(Station);
   const existingStations = await stationRepo.find({
-    select: { id: true, admiteSalaEspera: true, disponibilidades: true },
+    select: { id: true, detAdmiteSalaEspera: true, detDisponibilidades: true, confirmed: true },
   });
+  // Detection prior = the baseline from the last COMPLETE sweep. Only CONFIRMED
+  // stations count, so a station inserted by a partial flush this sweep is still
+  // detected as NEW on the complete flush, and partials never pollute the diff.
   const prior = new Map<number, PriorStationState>(
-    existingStations.map((s) => [
-      s.id,
-      { id: s.id, admiteSalaEspera: s.admiteSalaEspera, disponibilidades: s.disponibilidades },
-    ]),
+    existingStations
+      .filter((s) => s.confirmed)
+      .map((s) => [
+        s.id,
+        {
+          id: s.id,
+          admiteSalaEspera: s.detAdmiteSalaEspera,
+          disponibilidades: s.detDisponibilidades ?? 0,
+        },
+      ]),
   );
 
-  // Cold start: the first sweep populates the DB as a BASELINE. Without this,
+  // Detection runs ONLY on a complete sweep (full set). Cold start: the first
+  // complete sweep (no confirmed stations yet) is a BASELINE — no events, else
   // every station would diff as NEW and flood notifications.
-  const isFirstSweep = existingStations.length === 0;
-  const eventDrafts = isFirstSweep ? [] : detect({ prior, current });
+  const isFirstSweep = prior.size === 0;
+  const eventDrafts = complete && !isFirstSweep ? detect({ prior, current }) : [];
 
   const seenIds = new Set<number>();
   const now = new Date();
@@ -129,6 +139,14 @@ export async function POST(req: Request): Promise<Response> {
           disponibilidades: station.disponibilidades,
           active: true,
           lastSeenAt: now,
+          // Advance the detection baseline only on a complete sweep.
+          ...(complete
+            ? {
+                detDisponibilidades: station.disponibilidades,
+                detAdmiteSalaEspera: station.admiteSalaEspera,
+                confirmed: true,
+              }
+            : {}),
         };
         if (existing) {
           await txStationRepo.update(station.id, common);
