@@ -48,6 +48,7 @@ export async function POST(req: Request): Promise<Response> {
     userId: user.id,
     email: user.email,
     name: user.name,
+    role: user.role,
     sessionToken: signAppSession({ userId: user.id, email: user.email }),
   });
 }

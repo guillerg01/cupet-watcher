@@ -85,6 +85,19 @@ async function seedAdmin(): Promise<void> {
   process.stdout.write(`[sync-db] Admin created: ${email}\n`);
 }
 
+async function promoteAdmin(): Promise<void> {
+  const email = env.PROMOTE_ADMIN_EMAIL?.trim().toLowerCase();
+  if (!email) return;
+  const dataSource = await db();
+  const res = await dataSource.query(
+    `UPDATE "AppUser" SET role = 'ADMIN' WHERE LOWER(email) = $1`,
+    [email],
+  );
+  // node-pg returns affected count in res for UPDATE via query? TypeORM returns []
+  process.stdout.write(`[sync-db] Promote admin: ${email} (if exists) → ADMIN.\n`);
+  void res;
+}
+
 ensureEnums()
   .then(() => syncSchema())
   .then(() => ensureDeviceColumns())
@@ -93,6 +106,7 @@ ensureEnums()
     if (n > 0) process.stdout.write(`[sync-db] Station baseline: ${n} cupets marked confirmed.\n`);
   })
   .then(() => seedAdmin())
+  .then(() => promoteAdmin())
   .then(() => process.stdout.write("[sync-db] Done.\n"))
   .catch((err) => {
     process.stderr.write(`[sync-db] Error: ${String(err)}\n`);

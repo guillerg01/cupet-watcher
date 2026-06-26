@@ -31,6 +31,9 @@ const schema = z.object({
   AUTH_SECRET: z.string().optional().default("dev-secret-change-me"),
   ADMIN_EMAIL: z.string().optional().default(""),
   ADMIN_PASSWORD: z.string().optional().default(""),
+  // One-shot: promote this existing user to ADMIN on boot WITHOUT touching their
+  // password (unlike ADMIN_EMAIL/seedAdmin). Safe to leave set.
+  PROMOTE_ADMIN_EMAIL: z.string().optional().default(""),
   ENCRYPTION_KEY: z.string().optional().default(""),
   SCRAPE_PAGE_DELAY_MS_MIN: z.coerce.number().default(3500),
   SCRAPE_PAGE_DELAY_MS_MAX: z.coerce.number().default(7000),
