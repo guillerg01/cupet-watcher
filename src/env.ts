@@ -31,7 +31,7 @@ const schema = z.object({
   SCRAPE_PAGE_DELAY_MS_MIN: z.coerce.number().default(3500),
   SCRAPE_PAGE_DELAY_MS_MAX: z.coerce.number().default(7000),
   SCRAPE_RATE_LIMIT_COOLDOWN_MS: z.coerce.number().default(10_000),
-  WORKER_CHECK_CRON: z.string().default("0 */2 * * *"),
+  WORKER_CHECK_CRON: z.string().default("*/5 * * * *"),
   PREDICT_CRON: z.string().default("0 */6 * * *"),
 });
 

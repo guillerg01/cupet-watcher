@@ -26,6 +26,7 @@ export default async function AdminDevicesPage(): Promise<React.JSX.Element> {
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Usuario ticket</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Plataforma</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Ticket</th>
+              <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Push</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Último heartbeat</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Registro</th>
             </tr>
@@ -33,7 +34,7 @@ export default async function AdminDevicesPage(): Promise<React.JSX.Element> {
           <tbody>
             {devices.length === 0 ? (
               <tr>
-                <td colSpan={5} className="p-4 text-center" style={{ color: "var(--text-muted)" }}>
+                <td colSpan={6} className="p-4 text-center" style={{ color: "var(--text-muted)" }}>
                   Sin dispositivos registrados
                 </td>
               </tr>
@@ -46,6 +47,9 @@ export default async function AdminDevicesPage(): Promise<React.JSX.Element> {
                   <td className="p-3" style={{ color: "var(--text-muted)" }}>{d.platform}</td>
                   <td className="p-3" style={{ color: "var(--text)" }}>
                     {d.ticketLinked ? "vinculado" : "pendiente"}
+                  </td>
+                  <td className="p-3 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                    {d.pushToken ? "si" : "no"}
                   </td>
                   <td className="p-3 whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
                     {d.lastHeartbeatAt ? fmt.format(d.lastHeartbeatAt) : "—"}

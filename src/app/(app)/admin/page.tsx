@@ -10,6 +10,7 @@ import {
   UserRole,
 } from "@/infra/db";
 import StatCard from "@/components/StatCard";
+import TestPushPanel from "./TestPushPanel";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,8 @@ export default async function AdminOverviewPage(): Promise<React.JSX.Element> {
         <StatCard label="Logins fallidos" value={failedLogins} accent={failedLogins > 0} />
         <StatCard label="Admins" value={admins} />
       </div>
+
+      <TestPushPanel />
 
       <section>
         <div className="flex items-center justify-between mb-3">
