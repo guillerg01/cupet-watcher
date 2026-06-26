@@ -14,9 +14,11 @@
     "xutil:test-login": "tsx scripts/test-xutil-login.ts",
     "db:sync": "tsx scripts/sync-db.ts",
     "db:bootstrap": "tsx scripts/sync-db.ts",
-    "db:seed-admin": "tsx scripts/seed-admin.ts"
+    "db:seed-admin": "tsx scripts/seed-admin.ts",
+    "db:seed-remote": "tsx scripts/seed-remote.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^17.4.2",
     "next": "^15.1.4",

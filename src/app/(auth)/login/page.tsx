@@ -1,13 +1,41 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { loginAction, type ActionResult } from "@/lib/auth-actions";
-
-const initialState: ActionResult = {};
 
 export default function LoginPage(): React.JSX.Element {
-  const [state, action, pending] = useActionState(loginAction, initialState);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    setError(null);
+    setPending(true);
+
+    const form = e.currentTarget;
+    const email = (form.elements.namedItem("email") as HTMLInputElement).value;
+    const password = (form.elements.namedItem("password") as HTMLInputElement).value;
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = (await res.json()) as { error?: string; redirectTo?: string };
+
+      if (!res.ok) {
+        setError(data.error ?? "No se pudo iniciar sesión");
+        setPending(false);
+        return;
+      }
+
+      window.location.href = data.redirectTo ?? "/dashboard";
+    } catch {
+      setError("Error de red. Probá de nuevo.");
+      setPending(false);
+    }
+  }
 
   return (
     <main className="min-h-dvh flex items-center justify-center px-4" style={{ background: "var(--bg)" }}>
@@ -24,7 +52,7 @@ export default function LoginPage(): React.JSX.Element {
           </p>
         </div>
 
-        <form action={action} className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1" style={{ color: "var(--text)" }}>
               Email
@@ -61,9 +89,7 @@ export default function LoginPage(): React.JSX.Element {
             />
           </div>
 
-          {state?.error && (
-            <p className="text-sm text-red-400">{state.error}</p>
-          )}
+          {error && <p className="text-sm text-red-400">{error}</p>}
 
           <button
             type="submit"

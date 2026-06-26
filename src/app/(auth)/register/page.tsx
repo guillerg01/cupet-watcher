@@ -1,13 +1,59 @@
 "use client";
 
-import { useActionState } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { registerAction, type ActionResult } from "@/lib/auth-actions";
-
-const initialState: ActionResult = {};
 
 export default function RegisterPage(): React.JSX.Element {
-  const [state, action, pending] = useActionState(registerAction, initialState);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    setError(null);
+    setPending(true);
+
+    const form = e.currentTarget;
+    const name = (form.elements.namedItem("name") as HTMLInputElement).value;
+    const email = (form.elements.namedItem("email") as HTMLInputElement).value;
+    const password = (form.elements.namedItem("password") as HTMLInputElement).value;
+
+    try {
+      const reg = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name || undefined, email, password }),
+      });
+
+      if (reg.status === 409) {
+        setError("Ese email ya está registrado");
+        setPending(false);
+        return;
+      }
+      if (!reg.ok) {
+        setError("No se pudo crear la cuenta");
+        setPending(false);
+        return;
+      }
+
+      const login = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = (await login.json()) as { error?: string; redirectTo?: string };
+
+      if (!login.ok) {
+        setError(data.error ?? "Cuenta creada, pero falló el inicio de sesión");
+        setPending(false);
+        return;
+      }
+
+      window.location.href = data.redirectTo ?? "/onboarding";
+    } catch {
+      setError("Error de red. Probá de nuevo.");
+      setPending(false);
+    }
+  }
 
   return (
     <main className="min-h-dvh flex items-center justify-center px-4" style={{ background: "var(--bg)" }}>
@@ -24,7 +70,7 @@ export default function RegisterPage(): React.JSX.Element {
           </p>
         </div>
 
-        <form action={action} className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1" style={{ color: "var(--text)" }}>
               Nombre <span style={{ color: "var(--text-muted)" }}>(opcional)</span>
@@ -67,7 +113,7 @@ export default function RegisterPage(): React.JSX.Element {
             />
           </div>
 
-          {state?.error && <p className="text-sm text-red-400">{state.error}</p>}
+          {error && <p className="text-sm text-red-400">{error}</p>}
 
           <button
             type="submit"
