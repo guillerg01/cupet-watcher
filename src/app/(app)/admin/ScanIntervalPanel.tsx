@@ -8,6 +8,22 @@ export default function ScanIntervalPanel(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [forcing, setForcing] = useState(false);
+  const [forceMsg, setForceMsg] = useState<string | null>(null);
+
+  async function forceScan(): Promise<void> {
+    setForcing(true);
+    setForceMsg(null);
+    try {
+      const res = await fetch("/api/admin/force-scan", { method: "POST" });
+      const data = (await res.json()) as { message?: string; error?: string };
+      setForceMsg(data.message ?? data.error ?? `HTTP ${res.status}`);
+    } catch (e) {
+      setForceMsg(String(e));
+    } finally {
+      setForcing(false);
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -92,6 +108,27 @@ export default function ScanIntervalPanel(): React.JSX.Element {
           Guardado · ahora cada {interval} min.
         </p>
       )}
+
+      <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+        <p className="text-sm mb-2" style={{ color: "var(--text-muted)" }}>
+          Manda una orden SCAN por FCM a todos los dispositivos con token (los
+          despierta aunque la app esté cerrada).
+        </p>
+        <button
+          type="button"
+          disabled={forcing}
+          onClick={() => void forceScan()}
+          className="px-4 py-2.5 rounded-lg text-sm font-semibold transition-opacity disabled:opacity-60"
+          style={{ background: "transparent", color: "var(--brand)", border: "1.5px solid var(--brand)" }}
+        >
+          {forcing ? "Forzando…" : "Forzar barrido ahora"}
+        </button>
+        {forceMsg && (
+          <p className="text-sm mt-2" style={{ color: "var(--text)" }}>
+            {forceMsg}
+          </p>
+        )}
+      </div>
     </section>
   );
 }
