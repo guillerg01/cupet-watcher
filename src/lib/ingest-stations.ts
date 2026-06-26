@@ -1,5 +1,6 @@
 import { db } from "@/infra/db";
 import type { FuelStation } from "@/core/station/types";
+import { catalogCacheFromStation } from "@/lib/catalog-cache";
 
 export interface StationUpsertRow {
   station: FuelStation;
@@ -14,14 +15,16 @@ export async function upsertStationRows(rows: StationUpsertRow[], now: Date): Pr
   let count = 0;
 
   for (const { station, provinceId, complete } of rows) {
+    const cache = JSON.stringify(catalogCacheFromStation(station));
+
     if (complete) {
       await ds.query(
         `INSERT INTO "Station" (
           id, name, establishment, "provinceId", municipio,
           "admiteSalaEspera", "tieneValidacion", disponibilidades,
           active, "lastSeenAt", "firstSeenAt",
-          "detDisponibilidades", "detAdmiteSalaEspera", confirmed
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$9,$8,$6,true)
+          "detDisponibilidades", "detAdmiteSalaEspera", confirmed, "detailCache"
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$9,$8,$6,true,$10::jsonb)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           establishment = EXCLUDED.establishment,
@@ -34,7 +37,8 @@ export async function upsertStationRows(rows: StationUpsertRow[], now: Date): Pr
           "lastSeenAt" = EXCLUDED."lastSeenAt",
           "detDisponibilidades" = EXCLUDED."detDisponibilidades",
           "detAdmiteSalaEspera" = EXCLUDED."detAdmiteSalaEspera",
-          confirmed = true`,
+          confirmed = true,
+          "detailCache" = COALESCE("Station"."detailCache", '{}'::jsonb) || EXCLUDED."detailCache"`,
         [
           station.id,
           station.name,
@@ -45,6 +49,7 @@ export async function upsertStationRows(rows: StationUpsertRow[], now: Date): Pr
           station.tieneValidacion,
           station.disponibilidades,
           now,
+          cache,
         ],
       );
     } else {
@@ -52,8 +57,8 @@ export async function upsertStationRows(rows: StationUpsertRow[], now: Date): Pr
         `INSERT INTO "Station" (
           id, name, establishment, "provinceId", municipio,
           "admiteSalaEspera", "tieneValidacion", disponibilidades,
-          active, "lastSeenAt", "firstSeenAt"
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$9)
+          active, "lastSeenAt", "firstSeenAt", "detailCache"
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9,$9,$10::jsonb)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           establishment = EXCLUDED.establishment,
@@ -63,7 +68,8 @@ export async function upsertStationRows(rows: StationUpsertRow[], now: Date): Pr
           "tieneValidacion" = EXCLUDED."tieneValidacion",
           disponibilidades = EXCLUDED.disponibilidades,
           active = true,
-          "lastSeenAt" = EXCLUDED."lastSeenAt"`,
+          "lastSeenAt" = EXCLUDED."lastSeenAt",
+          "detailCache" = COALESCE("Station"."detailCache", '{}'::jsonb) || EXCLUDED."detailCache"`,
         [
           station.id,
           station.name,
@@ -74,6 +80,7 @@ export async function upsertStationRows(rows: StationUpsertRow[], now: Date): Pr
           station.tieneValidacion,
           station.disponibilidades,
           now,
+          cache,
         ],
       );
     }
@@ -131,4 +138,37 @@ export async function loadConfirmedStationPrior(): Promise<
     });
   }
   return prior;
+}
+
+/** Mark existing active stations as baseline so only future discoveries are NEW. */
+export async function establishStationBaseline(): Promise<number> {
+  const ds = await db();
+  await ds.query(
+    `CREATE TABLE IF NOT EXISTS "AppMeta" (
+      key varchar PRIMARY KEY,
+      value varchar NOT NULL
+    )`,
+  );
+
+  const updated = (await ds.query(
+    `UPDATE "Station" SET
+      confirmed = true,
+      "detDisponibilidades" = COALESCE("detDisponibilidades", disponibilidades),
+      "detAdmiteSalaEspera" = "admiteSalaEspera"
+     WHERE active = true AND confirmed = false
+     RETURNING id`,
+  )) as Array<{ id: number }>;
+
+  const [flag] = (await ds.query(
+    `SELECT value FROM "AppMeta" WHERE key = 'station_baseline_v1'`,
+  )) as Array<{ value: string }>;
+
+  if (!flag) {
+    await ds.query(
+      `INSERT INTO "AppMeta" (key, value) VALUES ('station_baseline_v1', $1)`,
+      [new Date().toISOString()],
+    );
+  }
+
+  return updated.length;
 }

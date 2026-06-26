@@ -23,7 +23,7 @@ export async function notifyMobileDevices(input: {
   const ds = await db();
   const devices = (await ds.query(
     `SELECT id, "pushToken", "watchProvinceIds", "pendingPushQueue"
-     FROM "Device" WHERE "ticketLinked" = true`,
+     FROM "Device"`,
   )) as DeviceRow[];
 
   const targets = devices.filter((d) =>

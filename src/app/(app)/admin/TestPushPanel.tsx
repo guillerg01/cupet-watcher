@@ -45,8 +45,8 @@ export default function TestPushPanel(): React.JSX.Element {
           Notificaciones push (prueba)
         </h2>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          Marca todos los dispositivos con ticket vinculado. La app muestra la alerta en el próximo
-          heartbeat (sin depender de token Expo).
+          Encola alertas en todos los dispositivos registrados. La app las muestra en el próximo
+          heartbeat (~15s) y también vía Expo si hay token push.
         </p>
       </div>
 

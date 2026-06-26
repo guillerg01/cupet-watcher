@@ -35,7 +35,6 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
 
   const onlineDevices = await deviceRepo.find({
     where: {
-      ticketLinked: true,
       lastHeartbeatAt: MoreThan(new Date(now - ONLINE_WINDOW_MS)),
     },
     // NULLS FIRST so a brand-new device (never assigned) is picked first.

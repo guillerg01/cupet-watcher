@@ -2,6 +2,7 @@ import "@/load-env";
 import "reflect-metadata";
 import bcrypt from "bcryptjs";
 import { syncSchema, repo, AppUser, UserRole, db } from "@/infra/db";
+import { establishStationBaseline } from "@/lib/ingest-stations";
 import { env } from "@/env";
 
 async function ensureDeviceColumns(): Promise<void> {
@@ -54,6 +55,10 @@ async function seedAdmin(): Promise<void> {
 
 syncSchema()
   .then(() => ensureDeviceColumns())
+  .then(async () => {
+    const n = await establishStationBaseline();
+    if (n > 0) process.stdout.write(`[sync-db] Station baseline: ${n} cupets marked confirmed.\n`);
+  })
   .then(() => seedAdmin())
   .then(() => process.stdout.write("[sync-db] Done.\n"))
   .catch((err) => {

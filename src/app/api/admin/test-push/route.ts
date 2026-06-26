@@ -14,7 +14,6 @@ export async function POST(req: Request): Promise<Response> {
 
   const deviceRepo = await repo(Device);
   const devices = await deviceRepo.find({
-    where: { ticketLinked: true },
     order: { lastHeartbeatAt: "DESC" },
   });
 
@@ -64,6 +63,6 @@ export async function POST(req: Request): Promise<Response> {
     message:
       devices.length > 0
         ? `Encoladas ${count} notificación(es) en ${devices.length} dispositivo(s). La app las recibe en heartbeats (~15s).`
-        : "No hay dispositivos con ticket vinculado",
+        : "No hay dispositivos registrados",
   });
 }

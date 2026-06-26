@@ -3,6 +3,8 @@ import { repo, Device } from "@/infra/db";
 
 export const dynamic = "force-dynamic";
 
+const ONLINE_MS = 5 * 60 * 1000;
+
 export default async function AdminDevicesPage(): Promise<React.JSX.Element> {
   await requireAdmin();
 
@@ -13,6 +15,7 @@ export default async function AdminDevicesPage(): Promise<React.JSX.Element> {
   });
 
   const fmt = new Intl.DateTimeFormat("es", { dateStyle: "short", timeStyle: "short" });
+  const now = Date.now();
 
   return (
     <div className="space-y-4">
@@ -23,9 +26,9 @@ export default async function AdminDevicesPage(): Promise<React.JSX.Element> {
         <table className="w-full text-sm">
           <thead style={{ background: "var(--surface)" }}>
             <tr>
-              <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Usuario ticket</th>
+              <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Cuenta</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Plataforma</th>
-              <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Ticket</th>
+              <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Estado</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Push</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Último heartbeat</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Registro</th>
@@ -39,26 +42,31 @@ export default async function AdminDevicesPage(): Promise<React.JSX.Element> {
                 </td>
               </tr>
             ) : (
-              devices.map((d) => (
-                <tr key={d.id} style={{ borderTop: "1px solid var(--border)" }}>
-                  <td className="p-3 font-mono text-xs" style={{ color: "var(--text)" }}>
-                    {d.xutilUsername}
-                  </td>
-                  <td className="p-3" style={{ color: "var(--text-muted)" }}>{d.platform}</td>
-                  <td className="p-3" style={{ color: "var(--text)" }}>
-                    {d.ticketLinked ? "vinculado" : "pendiente"}
-                  </td>
-                  <td className="p-3 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
-                    {d.pushToken ? "si" : "no"}
-                  </td>
-                  <td className="p-3 whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
-                    {d.lastHeartbeatAt ? fmt.format(d.lastHeartbeatAt) : "—"}
-                  </td>
-                  <td className="p-3 whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
-                    {fmt.format(d.createdAt)}
-                  </td>
-                </tr>
-              ))
+              devices.map((d) => {
+                const online =
+                  d.lastHeartbeatAt != null &&
+                  now - d.lastHeartbeatAt.getTime() < ONLINE_MS;
+                return (
+                  <tr key={d.id} style={{ borderTop: "1px solid var(--border)" }}>
+                    <td className="p-3 font-mono text-xs" style={{ color: "var(--text)" }}>
+                      {d.xutilUsername}
+                    </td>
+                    <td className="p-3" style={{ color: "var(--text-muted)" }}>{d.platform}</td>
+                    <td className="p-3" style={{ color: online ? "var(--text)" : "var(--text-muted)" }}>
+                      {online ? "online" : "offline"}
+                    </td>
+                    <td className="p-3 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
+                      {d.pushToken ? "si" : "no"}
+                    </td>
+                    <td className="p-3 whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
+                      {d.lastHeartbeatAt ? fmt.format(d.lastHeartbeatAt) : "—"}
+                    </td>
+                    <td className="p-3 whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
+                      {fmt.format(d.createdAt)}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

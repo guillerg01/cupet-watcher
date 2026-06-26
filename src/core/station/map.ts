@@ -32,5 +32,6 @@ export function toFuelStation(raw: RawService): FuelStation {
     // rating/views kept as-is; contract says nullable
     rating: raw.rating ?? null,
     views: raw.views ?? null,
+    imageUrl: raw.image_url ?? null,
   };
 }

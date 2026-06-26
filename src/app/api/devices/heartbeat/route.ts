@@ -7,7 +7,6 @@ import { drainPendingQueue } from "@/lib/push-queue";
 export const dynamic = "force-dynamic";
 
 const schema = z.object({
-  ticketLinked: z.boolean().optional(),
   pushToken: z.string().optional(),
   watchProvinceIds: z.array(z.number().int()).optional(),
 });
@@ -26,12 +25,31 @@ export async function POST(req: Request): Promise<Response> {
     const parsed = schema.safeParse(body ?? {});
 
     const deviceRepo = await repo(Device);
-    const device = await deviceRepo.findOne({ where: { id: auth.deviceId } });
+    let device = await deviceRepo.findOne({ where: { id: auth.deviceId } });
+
     if (!device) {
-      return NextResponse.json(
-        { error: "not_found", message: "Dispositivo no registrado — volvé a entrar en la app" },
-        { status: 404 },
-      );
+      const byAccount = await deviceRepo.findOne({
+        where: { xutilUsername: auth.xutilUsername },
+        order: { lastHeartbeatAt: "DESC" },
+      });
+      if (byAccount && byAccount.id !== auth.deviceId) {
+        return NextResponse.json(
+          { error: "stale_device", message: "Sesión de dispositivo desactualizada" },
+          { status: 401 },
+        );
+      }
+      if (!byAccount) {
+        device = await deviceRepo.save({
+          id: auth.deviceId,
+          xutilUsername: auth.xutilUsername,
+          platform: "android",
+          ticketLinked: false,
+          pushToken: parsed.success ? (parsed.data.pushToken ?? null) : null,
+          lastHeartbeatAt: new Date(),
+        });
+      } else {
+        device = byAccount;
+      }
     }
 
     const pendingPushes = drainPendingQueue(device);
@@ -42,12 +60,11 @@ export async function POST(req: Request): Promise<Response> {
       pendingPush: null,
     };
     if (parsed.success) {
-      if (parsed.data.ticketLinked !== undefined) patch.ticketLinked = parsed.data.ticketLinked;
       if (parsed.data.pushToken) patch.pushToken = parsed.data.pushToken;
       if (parsed.data.watchProvinceIds) patch.watchProvinceIds = parsed.data.watchProvinceIds;
     }
 
-    await deviceRepo.update({ id: auth.deviceId }, patch);
+    await deviceRepo.update({ id: device.id }, patch);
 
     return NextResponse.json({
       ok: true,

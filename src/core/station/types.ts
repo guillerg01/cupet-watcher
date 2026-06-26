@@ -11,6 +11,7 @@ export interface FuelStation {
   disponibilidades: number;
   rating: number | null;
   views: number | null;
+  imageUrl: string | null;
 }
 
 // Snapshot of availability/queue at a point in time

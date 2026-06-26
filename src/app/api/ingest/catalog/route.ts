@@ -27,6 +27,7 @@ const stationSchema = z.object({
   disponibilidades: z.number().int().min(0),
   rating: z.number().nullable().optional(),
   views: z.number().int().nullable().optional(),
+  imageUrl: z.string().nullable().optional(),
 });
 
 const schema = z.object({
@@ -64,6 +65,7 @@ export async function POST(req: Request): Promise<Response> {
       disponibilidades: s.disponibilidades,
       rating: s.rating ?? null,
       views: s.views ?? null,
+      imageUrl: s.imageUrl ?? null,
     }));
 
     const dataSource = await db();

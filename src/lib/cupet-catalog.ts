@@ -31,6 +31,12 @@ export interface ListCupetsOpts {
   watchProvinceIds?: number[];
 }
 
+function viewsFromCache(cache: unknown): number | null {
+  if (!cache || typeof cache !== "object") return null;
+  const v = (cache as { views?: number }).views;
+  return typeof v === "number" ? v : null;
+}
+
 function imageFromCache(cache: unknown): string | null {
   if (!cache || typeof cache !== "object") return null;
   const c = cache as { image_urls?: string[]; image_url?: string };
@@ -136,7 +142,7 @@ export async function listCupets(opts: ListCupetsOpts = {}): Promise<ListCupetsR
     disponibilidades: r.disponibilidades,
     admiteSalaEspera: r.admiteSalaEspera,
     confirmed: r.confirmed,
-    views: r.views ?? null,
+    views: r.views ?? viewsFromCache(r.detailCache) ?? null,
     rating: ratingFromCache(r.detailCache) ?? r.snapRating ?? null,
     imageUrl: imageFromCache(r.detailCache),
   }));
