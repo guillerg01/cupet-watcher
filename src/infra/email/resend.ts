@@ -1,13 +1,31 @@
-import { Resend } from "resend";
+import nodemailer, { type Transporter } from "nodemailer";
 import { env } from "@/env";
-import { getEmailFromIssue } from "@/lib/email-config";
 
-let _resend: Resend | null = null;
+// Email provider: Gmail SMTP only (free ~500/day). Use an App Password (needs
+// 2FA on the account), NEVER the real password — set it as GMAIL_APP_PASSWORD.
 
-function getClient(): Resend | null {
-  if (!env.RESEND_API_KEY) return null;
-  if (!_resend) _resend = new Resend(env.RESEND_API_KEY);
-  return _resend;
+let _gmail: Transporter | null = null;
+
+export function gmailConfigured(): boolean {
+  return !!(env.GMAIL_USER && env.GMAIL_APP_PASSWORD);
+}
+
+/** Human-readable reason the email provider isn't usable, or null if OK. */
+export function emailConfigIssue(): string | null {
+  if (!env.GMAIL_USER) return "Falta GMAIL_USER en el servidor.";
+  if (!env.GMAIL_APP_PASSWORD) return "Falta GMAIL_APP_PASSWORD (App Password de Gmail).";
+  return null;
+}
+
+function getGmail(): Transporter | null {
+  if (!gmailConfigured()) return null;
+  if (!_gmail) {
+    _gmail = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: env.GMAIL_USER, pass: env.GMAIL_APP_PASSWORD },
+    });
+  }
+  return _gmail;
 }
 
 export interface NewCupetPayload {
@@ -121,37 +139,27 @@ export async function sendNewCupetEmail(
   to: string,
   payload: NewCupetPayload,
 ): Promise<{ ok: boolean; error?: string }> {
-  const client = getClient();
-
-  if (!client) {
-    console.warn("[email] RESEND_API_KEY not set — skipping email to", to);
-    return { ok: false, error: "no api key" };
+  const gmail = getGmail();
+  if (!gmail) {
+    return { ok: false, error: emailConfigIssue() ?? "Gmail no configurado." };
   }
 
-  if (!env.EMAIL_FROM.trim()) {
-    return { ok: false, error: "EMAIL_FROM no configurado en el servidor." };
-  }
-
-  const fromIssue = getEmailFromIssue(env.EMAIL_FROM);
-  if (fromIssue) {
-    return { ok: false, error: fromIssue };
-  }
+  // Gmail forces the authenticated account as the real sender; EMAIL_FROM only
+  // sets the display name.
+  const from = env.EMAIL_FROM.trim()
+    ? `${env.EMAIL_FROM.trim()} <${env.GMAIL_USER}>`
+    : `Cupet Watcher <${env.GMAIL_USER}>`;
 
   try {
-    const { error } = await client.emails.send({
-      from: env.EMAIL_FROM,
+    await gmail.sendMail({
+      from,
       to,
       subject: `${TITLES[payload.type]}: ${payload.stationName} (${payload.provinceName})`,
       html: buildHtml(payload),
     });
-
-    if (error) {
-      return { ok: false, error: error.message };
-    }
-
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: msg };
+    return { ok: false, error: `gmail: ${msg}` };
   }
 }

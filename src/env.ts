@@ -24,6 +24,10 @@ const schema = z.object({
     .transform((v) => v === "true" || v === "1"),
   RESEND_API_KEY: z.string().optional().default(""),
   EMAIL_FROM: z.string().default(""),
+  // Gmail SMTP (free ~500/day). Use an App Password (needs 2FA on the account),
+  // NOT the real password. If set, takes priority over Resend.
+  GMAIL_USER: z.string().optional().default(""),
+  GMAIL_APP_PASSWORD: z.string().optional().default(""),
   AUTH_SECRET: z.string().optional().default("dev-secret-change-me"),
   ADMIN_EMAIL: z.string().optional().default(""),
   ADMIN_PASSWORD: z.string().optional().default(""),

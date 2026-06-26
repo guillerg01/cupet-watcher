@@ -1,26 +1,20 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin";
 import { repo, AppUser } from "@/infra/db";
-import { sendNewCupetEmail } from "@/infra/email/resend";
-import { env } from "@/env";
-import { extractEmailDomain, getEmailFromIssue } from "@/lib/email-config";
+import { sendNewCupetEmail, gmailConfigured, emailConfigIssue } from "@/infra/email/resend";
 
 export const dynamic = "force-dynamic";
 
-// Resend free tier caps at 100 emails/day. Refuse to start a broadcast we know
-// will be truncated, and report what was actually delivered.
-const SEND_CAP = 100;
+// Gmail SMTP allows ~500 emails/day. Cap the broadcast well under that.
+const SEND_CAP = 400;
 
 export async function GET(): Promise<Response> {
   const auth = await requireAdminApi();
   if (!auth.ok) return auth.response;
 
-  const from = env.EMAIL_FROM.trim();
-  const issue = from ? getEmailFromIssue(from) : "EMAIL_FROM no configurado en Render.";
+  const issue = emailConfigIssue();
   return NextResponse.json({
-    configured: !!env.RESEND_API_KEY && !!from && !getEmailFromIssue(from),
-    hasApiKey: !!env.RESEND_API_KEY,
-    fromDomain: from ? extractEmailDomain(from) : null,
+    configured: gmailConfigured(),
     issue: issue ?? null,
   });
 }
@@ -39,23 +33,9 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "Falta confirmación." }, { status: 400 });
   }
 
-  if (!env.RESEND_API_KEY) {
-    return NextResponse.json(
-      { error: "RESEND_API_KEY no configurada en el servidor." },
-      { status: 500 },
-    );
-  }
-
-  if (!env.EMAIL_FROM.trim()) {
-    return NextResponse.json(
-      { error: "EMAIL_FROM no configurado. En Render: Cupet Watcher <onboarding@resend.dev> para pruebas." },
-      { status: 500 },
-    );
-  }
-
-  const fromIssue = getEmailFromIssue(env.EMAIL_FROM);
-  if (fromIssue) {
-    return NextResponse.json({ error: fromIssue }, { status: 400 });
+  const issue = emailConfigIssue();
+  if (issue) {
+    return NextResponse.json({ error: issue }, { status: 500 });
   }
 
   const userRepo = await repo(AppUser);
@@ -100,7 +80,7 @@ export async function POST(req: Request): Promise<Response> {
       subscribers.length === 0
         ? "Sin suscriptores (nadie con notifyNew + correo)."
         : `Prueba enviada: ${sent} OK, ${failed} fallidos de ${targets.length}` +
-          (truncated ? ` · cortado en ${SEND_CAP} (límite Resend free)` : "") +
+          (truncated ? ` · cortado en ${SEND_CAP} (límite diario Gmail)` : "") +
           (lastError ? ` · último error: ${lastError}` : ""),
   });
 }
