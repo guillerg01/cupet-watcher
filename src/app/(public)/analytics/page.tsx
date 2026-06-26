@@ -1,16 +1,9 @@
 import Link from "next/link";
 import { getCupetStats } from "@/lib/cupet-stats";
 import { listProvinces } from "@/lib/cupet-catalog";
-import { db } from "@/infra/db";
 
 interface PageProps {
   searchParams: Promise<{ provinceId?: string }>;
-}
-
-interface QueueStat {
-  stationid: number;
-  stationname: string;
-  avgfill: number;
 }
 
 export default async function AnalyticsPage({ searchParams }: PageProps): Promise<React.JSX.Element> {
@@ -19,44 +12,13 @@ export default async function AnalyticsPage({ searchParams }: PageProps): Promis
     provinceRaw != null && provinceRaw !== "" ? Number(provinceRaw) : null;
   const filterId = provinceId != null && !Number.isNaN(provinceId) ? provinceId : null;
 
-  const [stats, provinces, dataSource] = await Promise.all([
+  const [stats, provinces] = await Promise.all([
     getCupetStats(filterId),
     listProvinces(),
-    db(),
-  ]);
-
-  const [queueStats, detectionTrend] = await Promise.all([
-    dataSource.query<QueueStat[]>(
-      `
-      SELECT
-        ss."stationId" AS stationid,
-        st.name AS stationname,
-        AVG(CASE WHEN ss."queueTotal" > 0 THEN ss."queuePosicion"::float / ss."queueTotal" ELSE NULL END) AS avgfill
-      FROM "StationSnapshot" ss
-      JOIN "Station" st ON st.id = ss."stationId"
-      WHERE ss.ts > NOW() - INTERVAL '7 days'
-        AND ss."queueTotal" > 0
-        ${filterId != null ? `AND st."provinceId" = ${filterId}` : ""}
-      GROUP BY ss."stationId", st.name
-      HAVING COUNT(*) >= 5
-      ORDER BY avgfill ASC
-      LIMIT 10
-      `,
-    ),
-    dataSource.query<{ day: string; count: string }[]>(
-      `
-      SELECT DATE_TRUNC('day', "detectedAt") AS day, COUNT(*)::bigint AS count
-      FROM "DetectionEvent"
-      WHERE "detectedAt" > NOW() - INTERVAL '14 days'
-      ${filterId != null ? `AND "provinceId" = ${filterId}` : ""}
-      GROUP BY 1
-      ORDER BY 1 ASC
-      `,
-    ),
   ]);
 
   const maxProv = Math.max(1, ...stats.byProvince.map((p) => p.total));
-  const maxEvents = Math.max(1, ...detectionTrend.map((d) => Number(d.count)));
+  const maxEvents = Math.max(1, ...stats.detectionTrend.map((d) => d.count));
 
   return (
     <div className="space-y-10">
@@ -147,7 +109,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps): Promis
         </div>
       </section>
 
-      {queueStats.length > 0 && (
+      {stats.queueStats.length > 0 && (
         <section>
           <h2 className="text-base font-semibold mb-1" style={{ color: "var(--text)" }}>
             Cola promedio (últimos 7 días)
@@ -156,16 +118,16 @@ export default async function AnalyticsPage({ searchParams }: PageProps): Promis
             Ratio posición/total — menor es mejor
           </p>
           <div className="space-y-2">
-            {queueStats.map((s) => {
-              const pct = Math.min(100, s.avgfill * 100);
-              const hue = Math.round((1 - s.avgfill) * 120);
+            {stats.queueStats.map((s) => {
+              const pct = Math.min(100, s.avgFill * 100);
+              const hue = Math.round((1 - s.avgFill) * 120);
               return (
-                <div key={s.stationid} className="flex items-center gap-3">
+                <div key={s.stationId} className="flex items-center gap-3">
                   <span
                     className="w-40 text-xs text-right shrink-0 truncate"
                     style={{ color: "var(--text-muted)" }}
                   >
-                    {s.stationname}
+                    {s.stationName}
                   </span>
                   <div
                     className="flex-1 rounded-full overflow-hidden h-4"
@@ -180,7 +142,7 @@ export default async function AnalyticsPage({ searchParams }: PageProps): Promis
                     />
                   </div>
                   <span className="text-xs w-10 text-right" style={{ color: "var(--text-muted)" }}>
-                    {(s.avgfill * 100).toFixed(0)}%
+                    {(s.avgFill * 100).toFixed(0)}%
                   </span>
                 </div>
               );
@@ -189,14 +151,14 @@ export default async function AnalyticsPage({ searchParams }: PageProps): Promis
         </section>
       )}
 
-      {detectionTrend.length > 0 && (
+      {stats.detectionTrend.length > 0 && (
         <section>
           <h2 className="text-base font-semibold mb-4" style={{ color: "var(--text)" }}>
             Detecciones (últimos 14 días)
           </h2>
           <div className="flex items-end gap-1 h-32">
-            {detectionTrend.map((d) => {
-              const h = (Number(d.count) / maxEvents) * 100;
+            {stats.detectionTrend.map((d) => {
+              const h = (d.count / maxEvents) * 100;
               const date = new Date(d.day);
               return (
                 <div

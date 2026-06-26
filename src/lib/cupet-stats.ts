@@ -16,6 +16,15 @@ export interface CupetStats {
     available: number;
     views: number;
   }>;
+  queueStats: Array<{
+    stationId: number;
+    stationName: string;
+    avgFill: number;
+  }>;
+  detectionTrend: Array<{
+    day: string;
+    count: number;
+  }>;
 }
 
 export async function getCupetStats(provinceId: number | null = null): Promise<CupetStats> {
@@ -74,20 +83,53 @@ export async function getCupetStats(provinceId: number | null = null): Promise<C
 
   const [workersRow] = (await ds.query(
     `SELECT COUNT(*)::int AS "onlineWorkers"
-     FROM "Device" WHERE "lastHeartbeatAt" > $1 AND "ticketLinked" = true`,
+     FROM "Device" WHERE "lastHeartbeatAt" > $1`,
     [onlineSince],
   )) as Array<{ onlineWorkers: number }>;
 
   let devicesWatching = 0;
   if (provinceId != null && !Number.isNaN(provinceId)) {
     const devices = (await ds.query(
-      `SELECT "watchProvinceIds" FROM "Device" WHERE "ticketLinked" = true`,
+      `SELECT "watchProvinceIds" FROM "Device"`,
     )) as Array<{ watchProvinceIds: number[] | null }>;
     devicesWatching = devices.filter((d) => {
       const w = d.watchProvinceIds ?? [];
       return w.length === 0 || w.includes(provinceId);
     }).length;
   }
+
+  const provinceFilter =
+    provinceId != null && !Number.isNaN(provinceId) ? `AND st."provinceId" = ${provinceId}` : "";
+
+  const queueStats = (await ds.query(
+    `SELECT
+      ss."stationId" AS "stationId",
+      st.name AS "stationName",
+      AVG(CASE WHEN ss."queueTotal" > 0 THEN ss."queuePosicion"::float / ss."queueTotal" ELSE NULL END)::float AS "avgFill"
+     FROM "StationSnapshot" ss
+     JOIN "Station" st ON st.id = ss."stationId"
+     WHERE ss.ts > NOW() - INTERVAL '7 days'
+       AND ss."queueTotal" > 0
+       ${provinceFilter}
+     GROUP BY ss."stationId", st.name
+     HAVING COUNT(*) >= 5
+     ORDER BY "avgFill" ASC
+     LIMIT 10`,
+  )) as CupetStats["queueStats"];
+
+  const detectionRows = (await ds.query(
+    `SELECT DATE_TRUNC('day', "detectedAt") AS day, COUNT(*)::int AS count
+     FROM "DetectionEvent"
+     WHERE "detectedAt" > NOW() - INTERVAL '14 days'
+     ${provinceId != null && !Number.isNaN(provinceId) ? `AND "provinceId" = ${provinceId}` : ""}
+     GROUP BY 1
+     ORDER BY 1 ASC`,
+  )) as Array<{ day: Date; count: number }>;
+
+  const detectionTrend = detectionRows.map((d) => ({
+    day: d.day.toISOString(),
+    count: d.count,
+  }));
 
   return {
     totalActive,
@@ -99,5 +141,7 @@ export async function getCupetStats(provinceId: number | null = null): Promise<C
     devicesWatching,
     provinceId,
     byProvince,
+    queueStats,
+    detectionTrend,
   };
 }
