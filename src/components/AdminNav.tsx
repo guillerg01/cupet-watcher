@@ -5,10 +5,12 @@ import { usePathname } from "next/navigation";
 
 const LINKS = [
   { href: "/admin", label: "Resumen", exact: true },
-  { href: "/admin/subscribers", label: "Suscriptores" },
-  { href: "/admin/logins", label: "Intentos de login" },
+  { href: "/admin/cupets", label: "Cupets" },
+  { href: "/admin/scans", label: "Escaneos" },
   { href: "/admin/devices", label: "Dispositivos" },
+  { href: "/admin/subscribers", label: "Suscriptores" },
   { href: "/admin/notifications", label: "Notificaciones" },
+  { href: "/admin/logins", label: "Intentos de login" },
 ];
 
 export default function AdminNav(): React.JSX.Element {
