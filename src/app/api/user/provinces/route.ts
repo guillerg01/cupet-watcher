@@ -65,7 +65,10 @@ export async function PATCH(req: Request): Promise<Response> {
   await dataSource.transaction(async (manager) => {
     await manager.delete(UserProvince, { userId });
     if (watchProvinceIds.length > 0) {
-      await manager.save(
+      // insert(), not save(): UserProvince has two ManyToOne relations and
+      // save() runs a topological sort over them that throws
+      // "Cyclic dependency". A plain bulk insert sidesteps that entirely.
+      await manager.insert(
         UserProvince,
         watchProvinceIds.map((provinceId) => ({ userId, provinceId })),
       );
