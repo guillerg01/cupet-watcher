@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/admin";
 import { repo, Notification } from "@/infra/db";
+import { detectionPushTitle } from "@/lib/detection-labels";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export default async function AdminNotificationsPage(): Promise<React.JSX.Elemen
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Fecha</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Usuario</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Estación</th>
+              <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Tipo</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Canal</th>
               <th className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>Estado</th>
             </tr>
@@ -34,7 +36,7 @@ export default async function AdminNotificationsPage(): Promise<React.JSX.Elemen
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="p-4 text-center" style={{ color: "var(--text-muted)" }}>
+                <td colSpan={6} className="p-4 text-center" style={{ color: "var(--text-muted)" }}>
                   Sin notificaciones
                 </td>
               </tr>
@@ -47,6 +49,9 @@ export default async function AdminNotificationsPage(): Promise<React.JSX.Elemen
                   <td className="p-3" style={{ color: "var(--text)" }}>{n.user?.email ?? n.userId}</td>
                   <td className="p-3" style={{ color: "var(--text)" }}>
                     {n.event?.station?.name ?? "—"}
+                  </td>
+                  <td className="p-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                    {n.event?.type ? detectionPushTitle(n.event.type) : "—"}
                   </td>
                   <td className="p-3 text-xs" style={{ color: "var(--text-muted)" }}>{n.channel}</td>
                   <td className="p-3">

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AssignmentStatus, DetectionType, db } from "@/infra/db";
 import { newId } from "@/infra/db/id";
 import { deviceFromRequest } from "@/lib/device-auth";
-import { detect } from "@/core/detection/detect";
+import { detect, detectDepartures } from "@/core/detection/detect";
 import type { PriorStationState } from "@/core/detection/types";
 import type { FuelStation } from "@/core/station/types";
 import {
@@ -13,6 +13,11 @@ import {
   loadConfirmedStationPrior,
 } from "@/lib/ingest-stations";
 import { notifyMobileDevices } from "@/lib/device-notify";
+import {
+  detectionPushBody,
+  detectionPushTitle,
+  summarizeDetectionEvents,
+} from "@/lib/detection-labels";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +97,14 @@ export async function POST(req: Request): Promise<Response> {
     const prior = new Map<number, PriorStationState>(priorRaw);
 
     const isFirstSweep = prior.size === 0;
-    const eventDrafts = complete && !isFirstSweep ? detect({ prior, current }) : [];
+    const arrivalDrafts =
+      complete && !isFirstSweep ? detect({ prior, current }) : [];
+    const departureDrafts =
+      complete && !isFirstSweep
+        ? detectDepartures(prior, new Set(current.map((s) => s.id)))
+        : [];
+    const eventDrafts = [...arrivalDrafts, ...departureDrafts];
+    const eventSummary = summarizeDetectionEvents(eventDrafts);
 
     const seenIds = new Set<number>();
     const now = new Date();
@@ -126,6 +138,15 @@ export async function POST(req: Request): Promise<Response> {
     }> = [];
 
     const stationNameById = new Map(current.map((s) => [s.id, s.name]));
+    const departedIds = departureDrafts.map((d) => d.stationId);
+    const departedNameById = new Map<number, string>();
+    if (departedIds.length > 0) {
+      const departedRows = (await dataSource.query(
+        `SELECT id, name FROM "Station" WHERE id = ANY($1::int[])`,
+        [departedIds],
+      )) as Array<{ id: number; name: string }>;
+      for (const row of departedRows) departedNameById.set(row.id, row.name);
+    }
 
     for (const draft of eventDrafts) {
       const provinceId = provinceMap.get(draft.provinceName.trim().toUpperCase());
@@ -138,8 +159,12 @@ export async function POST(req: Request): Promise<Response> {
         );
         newEvents++;
 
-        const name = stationNameById.get(draft.stationId) ?? `Cupet #${draft.stationId}`;
-        if (draft.type === DetectionType.NEW || draft.type === DetectionType.REAPPEARED) {
+        const name = stationNameById.get(draft.stationId) ?? departedNameById.get(draft.stationId) ?? `Cupet #${draft.stationId}`;
+        if (
+          draft.type === DetectionType.NEW ||
+          draft.type === DetectionType.REAPPEARED ||
+          draft.type === DetectionType.DEPARTED
+        ) {
           newCupets.push({
             stationId: draft.stationId,
             name,
@@ -149,18 +174,9 @@ export async function POST(req: Request): Promise<Response> {
           });
         }
 
-        const title =
-          draft.type === DetectionType.NEW
-            ? "Cupet nuevo"
-            : draft.type === DetectionType.REAPPEARED
-              ? "Cupet reaparecido"
-              : draft.type === DetectionType.BECAME_AVAILABLE
-                ? "Cupet con disponibilidad"
-                : "Sala de espera habilitada";
-
         await notifyMobileDevices({
-          title,
-          body: `${name} · ${draft.provinceName}`,
+          title: detectionPushTitle(draft.type),
+          body: detectionPushBody(draft.type, name, draft.provinceName),
           provinceId,
         });
       } catch {
@@ -180,6 +196,7 @@ export async function POST(req: Request): Promise<Response> {
       stations: current.length,
       seen: seenIds.size,
       newEvents,
+      eventSummary,
       newCupets,
       complete,
     });

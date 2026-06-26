@@ -1,4 +1,4 @@
-import type { DetectionInput, DetectionEventDraft } from "@/core/detection/types";
+import type { DetectionInput, DetectionEventDraft, PriorStationState } from "@/core/detection/types";
 
 /**
  * Pure, deterministic detection function.
@@ -8,6 +8,8 @@ import type { DetectionInput, DetectionEventDraft } from "@/core/detection/types
  *   - Was at 0 disponibilidades, now > 0 → BECAME_AVAILABLE
  *   - Was not admiteSalaEspera, now is → WAITROOM_ENABLED
  * At most one event per station; priority NEW > REAPPEARED > others.
+ *
+ * Use `detectDepartures` for stations that left the catalog (were active, not in current).
  */
 export function detect(input: DetectionInput): DetectionEventDraft[] {
   const events: DetectionEventDraft[] = [];
@@ -50,6 +52,25 @@ export function detect(input: DetectionInput): DetectionEventDraft[] {
         stationId: station.id,
         provinceName: station.provinceName,
         type: "WAITROOM_ENABLED",
+      });
+    }
+  }
+
+  return events;
+}
+
+export function detectDepartures(
+  prior: Map<number, PriorStationState>,
+  currentIds: Set<number>,
+): DetectionEventDraft[] {
+  const events: DetectionEventDraft[] = [];
+
+  for (const [stationId, p] of prior) {
+    if (p.active && !currentIds.has(stationId)) {
+      events.push({
+        stationId,
+        provinceName: p.provinceName,
+        type: "DEPARTED",
       });
     }
   }

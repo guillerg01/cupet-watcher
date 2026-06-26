@@ -1,12 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function TestEmailPanel(): React.JSX.Element {
   const [arming, setArming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [configIssue, setConfigIssue] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/admin/test-email", { credentials: "same-origin" });
+        const data = (await res.json()) as { issue?: string | null; configured?: boolean };
+        if (data.issue) setConfigIssue(data.issue);
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, []);
 
   async function send(): Promise<void> {
     setBusy(true);
@@ -16,6 +29,7 @@ export default function TestEmailPanel(): React.JSX.Element {
       const res = await fetch("/api/admin/test-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ confirm: true }),
       });
       const data = (await res.json()) as { message?: string; error?: string };
@@ -42,6 +56,11 @@ export default function TestEmailPanel(): React.JSX.Element {
           Manda un correo de notificación de prueba a TODOS los usuarios con alertas de
           nuevos cupets activadas. Son correos reales · Resend free corta en 100/día.
         </p>
+        {configIssue && (
+          <p className="text-sm mt-2" style={{ color: "var(--danger, #ef5a5a)" }}>
+            {configIssue}
+          </p>
+        )}
       </div>
 
       {!arming ? (

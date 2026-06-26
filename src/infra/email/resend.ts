@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { env } from "@/env";
+import { getEmailFromIssue } from "@/lib/email-config";
 
 let _resend: Resend | null = null;
 
@@ -14,21 +15,24 @@ export interface NewCupetPayload {
   establishment: string;
   provinceName: string;
   municipio: string | null;
-  type: "NEW" | "REAPPEARED" | "BECAME_AVAILABLE" | "WAITROOM_ENABLED";
+  type: "NEW" | "REAPPEARED" | "DEPARTED" | "BECAME_AVAILABLE" | "WAITROOM_ENABLED";
   publicLink: string;
 }
 
 const TITLES: Record<NewCupetPayload["type"], string> = {
-  NEW: "Nuevo cupet",
-  REAPPEARED: "Cupet reaparecido",
+  NEW: "Nuevo cupet en el listado",
+  REAPPEARED: "Cupet reapareció en el listado",
+  DEPARTED: "Cupet salió del listado",
   BECAME_AVAILABLE: "Cupet disponible",
   WAITROOM_ENABLED: "Sala de espera habilitada",
 };
 
 const SUBTITLES: Record<NewCupetPayload["type"], string> = {
-  NEW: "Se detectó un nuevo punto de combustible en tu provincia.",
+  NEW: "Se detectó un punto de combustible que no estaba antes en ticket.xutil.net.",
   REAPPEARED:
     "Un cupet que había salido del listado volvió a aparecer en tu provincia.",
+  DEPARTED:
+    "Un cupet que estaba en el listado ya no aparece en ticket.xutil.net.",
   BECAME_AVAILABLE:
     "Un cupet en tu provincia volvió a tener disponibilidades.",
   WAITROOM_ENABLED:
@@ -122,6 +126,15 @@ export async function sendNewCupetEmail(
   if (!client) {
     console.warn("[email] RESEND_API_KEY not set — skipping email to", to);
     return { ok: false, error: "no api key" };
+  }
+
+  if (!env.EMAIL_FROM.trim()) {
+    return { ok: false, error: "EMAIL_FROM no configurado en el servidor." };
+  }
+
+  const fromIssue = getEmailFromIssue(env.EMAIL_FROM);
+  if (fromIssue) {
+    return { ok: false, error: fromIssue };
   }
 
   try {

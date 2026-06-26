@@ -3,6 +3,7 @@ import type { FuelStation } from "@/core/station/types";
 export type DetectionType =
   | "NEW"
   | "REAPPEARED"
+  | "DEPARTED"
   | "BECAME_AVAILABLE"
   | "WAITROOM_ENABLED";
 
@@ -20,6 +21,7 @@ export interface PriorStationState {
   admiteSalaEspera: boolean;
   disponibilidades: number;
   active: boolean;
+  provinceName: string;
 }
 
 export interface DetectionInput {

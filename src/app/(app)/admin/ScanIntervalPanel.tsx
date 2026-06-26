@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+function fetchErrorMessage(e: unknown): string {
+  if (e instanceof TypeError && e.message === "Failed to fetch") {
+    return "Sin respuesta del servidor. Si Render estaba dormido, esperá ~1 minuto y reintentá.";
+  }
+  return String(e);
+}
+
 export default function ScanIntervalPanel(): React.JSX.Element {
   const [interval, setInterval] = useState<number | null>(null);
   const [options, setOptions] = useState<number[]>([30, 60]);
@@ -15,11 +22,12 @@ export default function ScanIntervalPanel(): React.JSX.Element {
     setForcing(true);
     setForceMsg(null);
     try {
-      const res = await fetch("/api/admin/force-scan", { method: "POST" });
+      const res = await fetch("/api/admin/force-scan", { method: "POST", credentials: "same-origin" });
       const data = (await res.json()) as { message?: string; error?: string };
-      setForceMsg(data.message ?? data.error ?? `HTTP ${res.status}`);
+      if (!res.ok) setForceMsg(data.error ?? `HTTP ${res.status}`);
+      else setForceMsg(data.message ?? "Listo.");
     } catch (e) {
-      setForceMsg(String(e));
+      setForceMsg(fetchErrorMessage(e));
     } finally {
       setForcing(false);
     }
@@ -28,12 +36,12 @@ export default function ScanIntervalPanel(): React.JSX.Element {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/admin/settings");
+        const res = await fetch("/api/admin/settings", { credentials: "same-origin" });
         const data = (await res.json()) as { scanIntervalMinutes: number; options: number[] };
         setInterval(data.scanIntervalMinutes);
         if (data.options?.length) setOptions(data.options);
       } catch (e) {
-        setError(String(e));
+        setError(fetchErrorMessage(e));
       }
     })();
   }, []);
@@ -56,7 +64,7 @@ export default function ScanIntervalPanel(): React.JSX.Element {
       setInterval(data.scanIntervalMinutes ?? minutes);
       setSaved(true);
     } catch (e) {
-      setError(String(e));
+      setError(fetchErrorMessage(e));
     } finally {
       setBusy(false);
     }

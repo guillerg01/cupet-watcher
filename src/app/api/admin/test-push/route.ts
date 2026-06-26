@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdminApi } from "@/lib/admin";
 import { repo, Device } from "@/infra/db";
 import { appendToQueue, newPendingPush } from "@/lib/push-queue";
 import { sendDevicePush } from "@/lib/push-send";
@@ -7,7 +7,8 @@ import { sendDevicePush } from "@/lib/push-send";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request): Promise<Response> {
-  await requireAdmin();
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
 
   const body = await req.json().catch(() => ({}));
   const count = Math.min(Math.max(Number((body as { count?: number }).count) || 1, 1), 5);

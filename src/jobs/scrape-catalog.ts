@@ -3,7 +3,7 @@ import { createXutilClient } from "@/infra/xutil/client";
 import { getScraperToken } from "@/infra/xutil/token-store";
 import { runSyncProvinces } from "@/jobs/sync-provinces";
 import { toFuelStation, isFuelService } from "@/core/station/map";
-import { detect } from "@/core/detection/detect";
+import { detect, detectDepartures } from "@/core/detection/detect";
 import type { PriorStationState } from "@/core/detection/types";
 import { Not, In } from "typeorm";
 
@@ -38,10 +38,13 @@ export async function runScrapeCatalog(): Promise<{
   const existingStations = await stationRepo.find({
     select: {
       id: true,
+      name: true,
       admiteSalaEspera: true,
       disponibilidades: true,
       active: true,
+      province: { name: true },
     },
+    relations: { province: true },
   });
   const prior = new Map<number, PriorStationState>(
     existingStations.map((s) => [
@@ -51,11 +54,14 @@ export async function runScrapeCatalog(): Promise<{
         admiteSalaEspera: s.admiteSalaEspera,
         disponibilidades: s.disponibilidades,
         active: s.active,
+        provinceName: s.province?.name ?? "",
       },
     ]),
   );
 
-  const eventDrafts = detect({ prior, current: fuelStations });
+  const arrivalDrafts = detect({ prior, current: fuelStations });
+  const departureDrafts = detectDepartures(prior, new Set(fuelStations.map((s) => s.id)));
+  const eventDrafts = [...arrivalDrafts, ...departureDrafts];
 
   const seenIds = new Set<number>();
   const BATCH = 50;

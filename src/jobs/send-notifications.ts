@@ -18,8 +18,8 @@ const PREF_BY_TYPE: Record<
   "notifyNew" | "notifyAvailable" | "notifyWaitroom"
 > = {
   [DetectionType.NEW]: "notifyNew",
-  // A reappeared cupet is as important as a new one — same opt-in.
   [DetectionType.REAPPEARED]: "notifyNew",
+  [DetectionType.DEPARTED]: "notifyNew",
   [DetectionType.BECAME_AVAILABLE]: "notifyAvailable",
   [DetectionType.WAITROOM_ENABLED]: "notifyWaitroom",
 };

@@ -15,7 +15,7 @@ export function cupetState(s: {
   admiteSalaEspera: boolean;
   confirmed: boolean;
 }): { state: CupetState; label: string } {
-  if (!s.confirmed) return { state: "new", label: "NUEVO" };
+  if (!s.confirmed) return { state: "new", label: "SIN DETALLE" };
   if (s.disponibilidades > 0)
     return { state: "available", label: `${s.disponibilidades} cupos` };
   if (s.admiteSalaEspera) return { state: "waitroom", label: "Sala espera" };

@@ -23,7 +23,7 @@ const schema = z.object({
     .default("false")
     .transform((v) => v === "true" || v === "1"),
   RESEND_API_KEY: z.string().optional().default(""),
-  EMAIL_FROM: z.string().default("Cupet Watcher <alerts@example.com>"),
+  EMAIL_FROM: z.string().default(""),
   AUTH_SECRET: z.string().optional().default("dev-secret-change-me"),
   ADMIN_EMAIL: z.string().optional().default(""),
   ADMIN_PASSWORD: z.string().optional().default(""),

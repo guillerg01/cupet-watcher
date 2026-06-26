@@ -21,7 +21,7 @@ export interface IngestCurrent {
 
 // Detail-ingest only diffs availability/waitroom on an already-known, active
 // station; NEW and REAPPEARED come from the catalog sweep, not from here.
-export type IngestDetection = Exclude<DetectionType, "NEW" | "REAPPEARED">;
+export type IngestDetection = Exclude<DetectionType, "NEW" | "REAPPEARED" | "DEPARTED">;
 
 export function detectFromSnapshot(
   prior: IngestPrior,

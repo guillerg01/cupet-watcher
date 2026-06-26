@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdminApi } from "@/lib/admin";
 import {
   getScanIntervalMinutes,
   setScanIntervalMinutes,
@@ -10,7 +10,8 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  await requireAdmin();
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
   const scanIntervalMinutes = await getScanIntervalMinutes();
   return NextResponse.json({
     scanIntervalMinutes,
@@ -23,7 +24,8 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(req: Request): Promise<Response> {
-  await requireAdmin();
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
   const body = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {

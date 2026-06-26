@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdminApi } from "@/lib/admin";
 import { repo, AppUser } from "@/infra/db";
 import { sendNewCupetEmail } from "@/infra/email/resend";
 import { env } from "@/env";
+import { extractEmailDomain, getEmailFromIssue } from "@/lib/email-config";
 
 export const dynamic = "force-dynamic";
 
@@ -10,13 +11,28 @@ export const dynamic = "force-dynamic";
 // will be truncated, and report what was actually delivered.
 const SEND_CAP = 100;
 
+export async function GET(): Promise<Response> {
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
+
+  const from = env.EMAIL_FROM.trim();
+  const issue = from ? getEmailFromIssue(from) : "EMAIL_FROM no configurado en Render.";
+  return NextResponse.json({
+    configured: !!env.RESEND_API_KEY && !!from && !getEmailFromIssue(from),
+    hasApiKey: !!env.RESEND_API_KEY,
+    fromDomain: from ? extractEmailDomain(from) : null,
+    issue: issue ?? null,
+  });
+}
+
 /**
  * Admin "test broadcast": send a clearly-labelled test notification email to
  * every subscriber that opted into new-cupet alerts (notifyNew=true with an
  * email). Outward-facing + irreversible, so the client must pass {confirm:true}.
  */
 export async function POST(req: Request): Promise<Response> {
-  await requireAdmin();
+  const auth = await requireAdminApi();
+  if (!auth.ok) return auth.response;
 
   const body = (await req.json().catch(() => ({}))) as { confirm?: boolean };
   if (body.confirm !== true) {
@@ -28,6 +44,18 @@ export async function POST(req: Request): Promise<Response> {
       { error: "RESEND_API_KEY no configurada en el servidor." },
       { status: 500 },
     );
+  }
+
+  if (!env.EMAIL_FROM.trim()) {
+    return NextResponse.json(
+      { error: "EMAIL_FROM no configurado. En Render: Cupet Watcher <onboarding@resend.dev> para pruebas." },
+      { status: 500 },
+    );
+  }
+
+  const fromIssue = getEmailFromIssue(env.EMAIL_FROM);
+  if (fromIssue) {
+    return NextResponse.json({ error: fromIssue }, { status: 400 });
   }
 
   const userRepo = await repo(AppUser);
