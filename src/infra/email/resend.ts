@@ -14,18 +14,21 @@ export interface NewCupetPayload {
   establishment: string;
   provinceName: string;
   municipio: string | null;
-  type: "NEW" | "BECAME_AVAILABLE" | "WAITROOM_ENABLED";
+  type: "NEW" | "REAPPEARED" | "BECAME_AVAILABLE" | "WAITROOM_ENABLED";
   publicLink: string;
 }
 
 const TITLES: Record<NewCupetPayload["type"], string> = {
   NEW: "Nuevo cupet",
+  REAPPEARED: "Cupet reaparecido",
   BECAME_AVAILABLE: "Cupet disponible",
   WAITROOM_ENABLED: "Sala de espera habilitada",
 };
 
 const SUBTITLES: Record<NewCupetPayload["type"], string> = {
   NEW: "Se detectó un nuevo punto de combustible en tu provincia.",
+  REAPPEARED:
+    "Un cupet que había salido del listado volvió a aparecer en tu provincia.",
   BECAME_AVAILABLE:
     "Un cupet en tu provincia volvió a tener disponibilidades.",
   WAITROOM_ENABLED:

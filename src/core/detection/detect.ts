@@ -4,9 +4,10 @@ import type { DetectionInput, DetectionEventDraft } from "@/core/detection/types
  * Pure, deterministic detection function.
  * For each station in `current`:
  *   - Not in prior → NEW
+ *   - In prior but was inactive (departed) → REAPPEARED
  *   - Was at 0 disponibilidades, now > 0 → BECAME_AVAILABLE
  *   - Was not admiteSalaEspera, now is → WAITROOM_ENABLED
- * At most one event per station; NEW takes priority over all.
+ * At most one event per station; priority NEW > REAPPEARED > others.
  */
 export function detect(input: DetectionInput): DetectionEventDraft[] {
   const events: DetectionEventDraft[] = [];
@@ -20,6 +21,17 @@ export function detect(input: DetectionInput): DetectionEventDraft[] {
         stationId: station.id,
         provinceName: station.provinceName,
         type: "NEW",
+      });
+      continue;
+    }
+
+    if (!prior.active) {
+      // Known cupet that had left the catalog and is back — the critical
+      // "reappeared" signal. Takes priority over availability/waitroom diffs.
+      events.push({
+        stationId: station.id,
+        provinceName: station.provinceName,
+        type: "REAPPEARED",
       });
       continue;
     }

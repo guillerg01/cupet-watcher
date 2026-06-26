@@ -5,6 +5,9 @@ export enum UserRole {
 
 export enum DetectionType {
   NEW = "NEW",
+  // A previously deactivated (departed) cupet that shows up again — the
+  // critical business signal: "uno que quitaron del listado volvió".
+  REAPPEARED = "REAPPEARED",
   BECAME_AVAILABLE = "BECAME_AVAILABLE",
   WAITROOM_ENABLED = "WAITROOM_ENABLED",
 }

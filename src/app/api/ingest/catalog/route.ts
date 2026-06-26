@@ -139,7 +139,7 @@ export async function POST(req: Request): Promise<Response> {
         newEvents++;
 
         const name = stationNameById.get(draft.stationId) ?? `Cupet #${draft.stationId}`;
-        if (draft.type === DetectionType.NEW) {
+        if (draft.type === DetectionType.NEW || draft.type === DetectionType.REAPPEARED) {
           newCupets.push({
             stationId: draft.stationId,
             name,
@@ -152,9 +152,11 @@ export async function POST(req: Request): Promise<Response> {
         const title =
           draft.type === DetectionType.NEW
             ? "Cupet nuevo"
-            : draft.type === DetectionType.BECAME_AVAILABLE
-              ? "Cupet con disponibilidad"
-              : "Sala de espera habilitada";
+            : draft.type === DetectionType.REAPPEARED
+              ? "Cupet reaparecido"
+              : draft.type === DetectionType.BECAME_AVAILABLE
+                ? "Cupet con disponibilidad"
+                : "Sala de espera habilitada";
 
         await notifyMobileDevices({
           title,

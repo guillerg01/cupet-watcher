@@ -5,6 +5,32 @@ import { syncSchema, repo, AppUser, UserRole, db } from "@/infra/db";
 import { establishStationBaseline } from "@/lib/ingest-stations";
 import { env } from "@/env";
 
+// New DetectionType values must exist in the Postgres enum BEFORE TypeORM's
+// synchronize runs — otherwise synchronize tries to recreate the enum and can
+// fail. ADD VALUE IF NOT EXISTS is idempotent and must run outside a tx (the
+// TypeORM query() autocommits each statement, so this is fine).
+async function ensureEnums(): Promise<void> {
+  const dataSource = await db();
+  const cols = (await dataSource.query(
+    `SELECT udt_name FROM information_schema.columns
+     WHERE table_name = 'DetectionEvent' AND column_name = 'type'`,
+  )) as Array<{ udt_name: string }>;
+
+  const enumName = cols[0]?.udt_name;
+  if (!enumName) {
+    // Fresh DB — synchronize will create the enum with all current values.
+    process.stdout.write("[sync-db] DetectionEvent enum not present yet (fresh DB).\n");
+    return;
+  }
+
+  for (const value of ["NEW", "REAPPEARED", "BECAME_AVAILABLE", "WAITROOM_ENABLED"]) {
+    await dataSource.query(
+      `ALTER TYPE "${enumName}" ADD VALUE IF NOT EXISTS '${value}'`,
+    );
+  }
+  process.stdout.write("[sync-db] DetectionEvent enum values OK (REAPPEARED ensured).\n");
+}
+
 async function ensureDeviceColumns(): Promise<void> {
   const dataSource = await db();
   await dataSource.query(
@@ -53,7 +79,8 @@ async function seedAdmin(): Promise<void> {
   process.stdout.write(`[sync-db] Admin created: ${email}\n`);
 }
 
-syncSchema()
+ensureEnums()
+  .then(() => syncSchema())
   .then(() => ensureDeviceColumns())
   .then(async () => {
     const n = await establishStationBaseline();

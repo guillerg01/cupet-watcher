@@ -20,3 +20,9 @@ coverage
 next-env.d.ts
 
 .vercel
+
+# local debug artifacts
+_*.png
+_emu*.png
+_test-ingest.json
+chat.md

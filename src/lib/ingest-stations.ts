@@ -117,24 +117,30 @@ export async function insertStationSnapshots(
 }
 
 export async function loadConfirmedStationPrior(): Promise<
-  Map<number, { id: number; admiteSalaEspera: boolean; disponibilidades: number }>
+  Map<number, { id: number; admiteSalaEspera: boolean; disponibilidades: number; active: boolean }>
 > {
   const ds = await db();
+  // `active` is carried so detect() can flag a reappeared (was inactive) cupet.
   const rows = (await ds.query(
-    `SELECT id, "detAdmiteSalaEspera", "detDisponibilidades"
+    `SELECT id, "detAdmiteSalaEspera", "detDisponibilidades", active
      FROM "Station" WHERE confirmed = true`,
   )) as Array<{
     id: number;
     detAdmiteSalaEspera: boolean;
     detDisponibilidades: number | null;
+    active: boolean;
   }>;
 
-  const prior = new Map<number, { id: number; admiteSalaEspera: boolean; disponibilidades: number }>();
+  const prior = new Map<
+    number,
+    { id: number; admiteSalaEspera: boolean; disponibilidades: number; active: boolean }
+  >();
   for (const s of rows) {
     prior.set(s.id, {
       id: s.id,
       admiteSalaEspera: s.detAdmiteSalaEspera,
       disponibilidades: s.detDisponibilidades ?? 0,
+      active: s.active,
     });
   }
   return prior;

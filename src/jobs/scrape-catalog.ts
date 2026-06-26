@@ -40,6 +40,7 @@ export async function runScrapeCatalog(): Promise<{
       id: true,
       admiteSalaEspera: true,
       disponibilidades: true,
+      active: true,
     },
   });
   const prior = new Map<number, PriorStationState>(
@@ -49,6 +50,7 @@ export async function runScrapeCatalog(): Promise<{
         id: s.id,
         admiteSalaEspera: s.admiteSalaEspera,
         disponibilidades: s.disponibilidades,
+        active: s.active,
       },
     ]),
   );
