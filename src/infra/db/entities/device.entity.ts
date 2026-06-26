@@ -44,6 +44,12 @@ export class Device {
   @Column({ type: "timestamptz", nullable: true })
   lastAssignedAt!: Date | null;
 
+  @Column({ type: "jsonb", nullable: true })
+  pendingPush!: { title: string; body: string } | null;
+
+  @Column({ type: "jsonb", default: () => "'[]'" })
+  watchProvinceIds!: number[];
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 

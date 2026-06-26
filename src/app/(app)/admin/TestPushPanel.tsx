@@ -3,11 +3,10 @@
 import { useState } from "react";
 
 interface PushResult {
-  sent: number;
-  failed: number;
-  total: number;
+  queued: number;
+  expoSent: number;
+  expoTotal: number;
   message: string;
-  errors?: string[];
 }
 
 export default function TestPushPanel(): React.JSX.Element {
@@ -44,8 +43,8 @@ export default function TestPushPanel(): React.JSX.Element {
           Notificaciones push (prueba)
         </h2>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
-          Envía una notificación de prueba a todos los dispositivos móviles con token registrado.
-          Útil para verificar cómo se ven las alertas en el teléfono.
+          Marca todos los dispositivos con ticket vinculado. La app muestra la alerta en el próximo
+          heartbeat (sin depender de token Expo).
         </p>
       </div>
 
@@ -69,21 +68,14 @@ export default function TestPushPanel(): React.JSX.Element {
         <div
           className="text-sm rounded-lg p-3 space-y-1"
           style={{
-            background: result.sent > 0 ? "rgba(31,214,166,0.1)" : "rgba(239,90,90,0.1)",
+            background: result.queued > 0 ? "rgba(31,214,166,0.1)" : "rgba(239,90,90,0.1)",
             color: "var(--text)",
           }}
         >
           <p>{result.message}</p>
           <p style={{ color: "var(--text-muted)" }}>
-            Enviadas: {result.sent} · Fallidas: {result.failed} · Total tokens: {result.total}
+            Dispositivos marcados: {result.queued} · Expo push: {result.expoSent}/{result.expoTotal}
           </p>
-          {result.errors && result.errors.length > 0 && (
-            <ul className="text-xs font-mono mt-2" style={{ color: "var(--text-muted)" }}>
-              {result.errors.map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
     </section>
