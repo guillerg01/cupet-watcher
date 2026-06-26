@@ -60,6 +60,21 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     const { assignmentId, complete, provinces, stations } = parsed.data;
+
+    // Anti-poisoning gate: detection, deactivation and notifications only run
+    // for sweeps backed by a real coordinator assignment for THIS device. An
+    // unassigned/manual sweep can still refresh station data, but cannot emit
+    // false NEW alerts or mass-deactivate the catalog.
+    let assignmentValid = false;
+    if (assignmentId) {
+      const dsAuth = await db();
+      const [arow] = (await dsAuth.query(
+        `SELECT 1 FROM "Assignment" WHERE id = $1 AND "deviceId" = $2 LIMIT 1`,
+        [assignmentId, auth.deviceId],
+      )) as Array<{ "?column?": number }>;
+      assignmentValid = !!arow;
+    }
+    const trusted = complete && assignmentValid;
     const current: FuelStation[] = stations.map((s) => ({
       id: s.id,
       name: s.name,
@@ -108,12 +123,12 @@ export async function POST(req: Request): Promise<Response> {
     )) as Array<{ ready: boolean }>;
     const isFirstSweep = !baseline?.ready;
     const rawArrivals =
-      complete && !isFirstSweep ? detect({ prior, current: mappableCurrent }) : [];
+      trusted && !isFirstSweep ? detect({ prior, current: mappableCurrent }) : [];
     const arrivalDrafts = rawArrivals.filter(
       (d) => !(d.type === "NEW" && knownStationIds.has(d.stationId)),
     );
     const departureDrafts =
-      complete && !isFirstSweep
+      trusted && !isFirstSweep
         ? detectDepartures(prior, seenIds)
         : [];
     const eventDrafts = [...arrivalDrafts, ...departureDrafts];
@@ -132,7 +147,7 @@ export async function POST(req: Request): Promise<Response> {
       await upsertStationRows(upsertBatch.slice(i, i + BATCH), now);
     }
 
-    if (complete && seenIds.size > 0) {
+    if (trusted && seenIds.size > 0) {
       await deactivateUnseenStations(Array.from(seenIds));
     }
 

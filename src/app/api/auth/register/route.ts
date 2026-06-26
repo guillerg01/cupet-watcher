@@ -22,7 +22,8 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
-  const { email, password, name } = parsed.data;
+  const { password, name } = parsed.data;
+  const email = parsed.data.email.toLowerCase().trim();
   const userRepo = await repo(AppUser);
 
   const existing = await userRepo.findOne({ where: { email } });

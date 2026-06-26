@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
 import { repo, AppUser, UserProvince, UserRole } from "@/infra/db";
-import { logAuthAttempt } from "@/lib/auth-attempts";
+import { logAuthAttempt, tooManyRecentFailures } from "@/lib/auth-attempts";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,15 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
   }
 
-  const { email, password } = parsed.data;
+  const email = parsed.data.email.toLowerCase().trim();
+  const { password } = parsed.data;
+
+  if (await tooManyRecentFailures(email)) {
+    return NextResponse.json(
+      { error: "Demasiados intentos. Esperá unos minutos." },
+      { status: 429 },
+    );
+  }
 
   try {
     const result = await signIn("credentials", {
@@ -32,10 +40,12 @@ export async function POST(req: Request): Promise<Response> {
     });
 
     if (result?.error) {
+      await logAuthAttempt({ email, success: false, reason: "invalid_credentials" });
       return NextResponse.json({ error: "Email o contraseña incorrectos" }, { status: 401 });
     }
   } catch (err) {
     if (err instanceof AuthError) {
+      await logAuthAttempt({ email, success: false, reason: "invalid_credentials" });
       return NextResponse.json({ error: "Email o contraseña incorrectos" }, { status: 401 });
     }
     throw err;

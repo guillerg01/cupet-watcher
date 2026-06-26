@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { env } from "@/env";
+import { db } from "@/infra/db";
 import { runAssignWork } from "@/jobs/assign-work";
 import { runSendNotifications } from "@/jobs/send-notifications";
+
+// Arbitrary advisory-lock key so overlapping pings don't run the coordinator twice.
+const COORDINATOR_LOCK = 911001;
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,6 +34,21 @@ async function handle(req: Request): Promise<Response> {
   }
 
   const startedAt = Date.now();
+  const ds = await db();
+
+  // Pin one connection so the advisory lock + unlock run on the same session
+  // (a pooled ds.query() could unlock on a different connection → leak).
+  const qr = ds.createQueryRunner();
+  await qr.connect();
+
+  const [lock] = (await qr.query(`SELECT pg_try_advisory_lock($1) AS got`, [
+    COORDINATOR_LOCK,
+  ])) as Array<{ got: boolean }>;
+  if (!lock?.got) {
+    await qr.release();
+    return NextResponse.json({ ok: true, skipped: "already_running" });
+  }
+
   try {
     const assigned = await runAssignWork();
     const notify = await runSendNotifications();
@@ -42,6 +61,9 @@ async function handle(req: Request): Promise<Response> {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+  } finally {
+    await qr.query(`SELECT pg_advisory_unlock($1)`, [COORDINATOR_LOCK]);
+    await qr.release();
   }
 }
 

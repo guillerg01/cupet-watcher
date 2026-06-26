@@ -3,7 +3,7 @@ import { compare } from "bcryptjs";
 import { z } from "zod";
 import { repo, AppUser } from "@/infra/db";
 import { signAppSession } from "@/lib/app-session-auth";
-import { logAuthAttempt } from "@/lib/auth-attempts";
+import { logAuthAttempt, tooManyRecentFailures } from "@/lib/auth-attempts";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,16 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
-  const { email, password } = parsed.data;
+  const email = parsed.data.email.toLowerCase().trim();
+  const { password } = parsed.data;
+
+  if (await tooManyRecentFailures(email)) {
+    return NextResponse.json(
+      { error: "too_many_attempts", message: "Demasiados intentos. Esperá unos minutos." },
+      { status: 429 },
+    );
+  }
+
   const userRepo = await repo(AppUser);
   const user = await userRepo.findOne({ where: { email } });
   if (!user) {

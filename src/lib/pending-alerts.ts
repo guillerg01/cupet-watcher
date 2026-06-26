@@ -93,14 +93,20 @@ export async function ackAlerts(userId: string): Promise<void> {
 
 /** Users with at least one pending alert + a device push token (for reminders). */
 export async function getUsersWithPendingAlerts(): Promise<
-  Array<{ userId: string; email: string; count: number; pushTokens: string[] }>
+  Array<{
+    userId: string;
+    email: string;
+    count: number;
+    pushTokens: string[];
+    lastReminderAt: Date | null;
+  }>
 > {
   const ds = await db();
   const since = new Date(Date.now() - ALERT_WINDOW_MS);
 
   const rows = (await ds.query(
     `
-    SELECT u.id AS "userId", u.email,
+    SELECT u.id AS "userId", u.email, u."lastAlertsReminderAt" AS "lastReminderAt",
            COUNT(DISTINCT e."stationId")::int AS count,
            COALESCE(
              ARRAY_AGG(DISTINCT d."pushToken") FILTER (WHERE d."pushToken" IS NOT NULL),
@@ -115,15 +121,28 @@ export async function getUsersWithPendingAlerts(): Promise<
     INNER JOIN "Station" s ON s.id = e."stationId" AND s.active = true
     LEFT JOIN "Device" d ON d."xutilUsername" = u.email
     WHERE u."notifyNew" = true
-    GROUP BY u.id, u.email
+    GROUP BY u.id, u.email, u."lastAlertsReminderAt"
     `,
     [since],
-  )) as Array<{ userId: string; email: string; count: number; pushTokens: string[] }>;
+  )) as Array<{
+    userId: string;
+    email: string;
+    count: number;
+    pushTokens: string[];
+    lastReminderAt: Date | null;
+  }>;
 
   return rows.map((r) => ({
     userId: r.userId,
     email: r.email,
     count: r.count,
     pushTokens: Array.isArray(r.pushTokens) ? r.pushTokens.filter(Boolean) : [],
+    lastReminderAt: r.lastReminderAt,
   }));
+}
+
+/** Drop a dead FCM token so we stop retrying it every cron pass. */
+export async function clearDeadPushToken(token: string): Promise<void> {
+  const ds = await db();
+  await ds.query(`UPDATE "Device" SET "pushToken" = NULL WHERE "pushToken" = $1`, [token]);
 }

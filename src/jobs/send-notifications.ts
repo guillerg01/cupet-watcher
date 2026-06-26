@@ -8,8 +8,13 @@ import {
   DetectionType,
 } from "@/infra/db";
 import { sendNewCupetEmail } from "@/infra/email/resend";
-import { sendFcmPush } from "@/infra/push/fcm";
-import { getUsersWithPendingAlerts } from "@/lib/pending-alerts";
+import { sendFcmPush, isUnrecoverableFcmError } from "@/infra/push/fcm";
+import { getUsersWithPendingAlerts, clearDeadPushToken } from "@/lib/pending-alerts";
+import { db } from "@/infra/db";
+
+// Don't re-push the reminder more than once per this interval, even though the
+// cron passes more often. Avoids hammering a user who hasn't opened the app.
+const REMINDER_THROTTLE_MS = 2 * 60 * 60 * 1000;
 
 function buildPublicLink(stationId: number): string {
   return `https://ticket.xutil.net/store/service-detail?service=${stationId}`;
@@ -121,18 +126,43 @@ export async function runSendNotifications(): Promise<{
 
 export async function runAlertReminders(): Promise<{ remindersSent: number }> {
   const users = await getUsersWithPendingAlerts();
+  const now = Date.now();
   let remindersSent = 0;
 
   for (const u of users) {
     if (u.pushTokens.length === 0) continue;
+
+    // Throttle: skip users reminded within the window.
+    if (u.lastReminderAt && now - u.lastReminderAt.getTime() < REMINDER_THROTTLE_MS) {
+      continue;
+    }
+
     const title = u.count === 1 ? "Cupet nuevo en tu provincia" : `${u.count} cupets nuevos`;
     const body = "Abrí Cupet Watcher para verlos.";
+
     try {
       const results = await sendFcmPush(u.pushTokens, title, body, {
         type: "PENDING_ALERTS",
         count: String(u.count),
       });
-      remindersSent += results.filter((r) => r.ok).length;
+
+      // Prune dead tokens (index-aligned with the tokens we sent).
+      await Promise.all(
+        results.map(async (r, i) => {
+          if (!r.ok && isUnrecoverableFcmError(r.error)) {
+            await clearDeadPushToken(u.pushTokens[i]);
+          }
+        }),
+      );
+
+      const ok = results.filter((r) => r.ok).length;
+      remindersSent += ok;
+      if (ok > 0) {
+        const ds = await db();
+        await ds.query(`UPDATE "AppUser" SET "lastAlertsReminderAt" = now() WHERE id = $1`, [
+          u.userId,
+        ]);
+      }
     } catch {
       /* best-effort — never block the cron */
     }

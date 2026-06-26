@@ -45,6 +45,9 @@ async function ensureDeviceColumns(): Promise<void> {
   await dataSource.query(
     `ALTER TABLE "AppUser" ADD COLUMN IF NOT EXISTS "lastAlertsSeenAt" timestamptz`,
   );
+  await dataSource.query(
+    `ALTER TABLE "AppUser" ADD COLUMN IF NOT EXISTS "lastAlertsReminderAt" timestamptz`,
+  );
   process.stdout.write("[sync-db] Device/AppUser columns OK.\n");
 }
 

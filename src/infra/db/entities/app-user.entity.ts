@@ -48,6 +48,10 @@ export class AppUser {
   @Column({ type: "timestamptz", nullable: true })
   lastAlertsSeenAt!: Date | null;
 
+  // Throttle for the recurring push reminder (don't re-push every cron pass).
+  @Column({ type: "timestamptz", nullable: true })
+  lastAlertsReminderAt!: Date | null;
+
   @OneToMany("UserProvince", "user")
   provinces!: UserProvince[];
 
