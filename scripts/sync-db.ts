@@ -42,6 +42,9 @@ async function ensureDeviceColumns(): Promise<void> {
   await dataSource.query(
     `ALTER TABLE "Device" ADD COLUMN IF NOT EXISTS "pendingPush" jsonb`,
   );
+  await dataSource.query(`ALTER TABLE "Device" ADD COLUMN IF NOT EXISTS "lastScanStage" varchar`);
+  await dataSource.query(`ALTER TABLE "Device" ADD COLUMN IF NOT EXISTS "lastScanError" text`);
+  await dataSource.query(`ALTER TABLE "Device" ADD COLUMN IF NOT EXISTS "lastScanLogAt" timestamptz`);
   await dataSource.query(
     `ALTER TABLE "AppUser" ADD COLUMN IF NOT EXISTS "lastAlertsSeenAt" timestamptz`,
   );

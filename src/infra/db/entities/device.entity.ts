@@ -53,6 +53,17 @@ export class Device {
   @Column({ type: "jsonb", default: () => "'[]'" })
   watchProvinceIds!: number[];
 
+  // Closed-app scan observability: the device reports its latest stage/error so
+  // the admin can see exactly where a background sweep dies.
+  @Column({ type: "varchar", nullable: true })
+  lastScanStage!: string | null;
+
+  @Column({ type: "text", nullable: true })
+  lastScanError!: string | null;
+
+  @Column({ type: "timestamptz", nullable: true })
+  lastScanLogAt!: Date | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 

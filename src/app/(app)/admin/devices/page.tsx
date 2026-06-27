@@ -51,7 +51,7 @@ export default async function AdminDevicesPage(): Promise<React.JSX.Element> {
         <table className="w-full text-sm">
           <thead style={{ background: "var(--surface)" }}>
             <tr>
-              {["Cuenta", "Estado", "Push", "Ticket", "Prov.", "Heartbeat", "Último escaneo", "Registro"].map((h) => (
+              {["Cuenta", "Estado", "Push", "Ticket", "Prov.", "Heartbeat", "Último escaneo", "Log scan (app)", "Registro"].map((h) => (
                 <th key={h} className="text-left p-3 font-medium" style={{ color: "var(--text-muted)" }}>
                   {h}
                 </th>
@@ -61,7 +61,7 @@ export default async function AdminDevicesPage(): Promise<React.JSX.Element> {
           <tbody>
             {devices.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-4 text-center" style={{ color: "var(--text-muted)" }}>
+                <td colSpan={9} className="p-4 text-center" style={{ color: "var(--text-muted)" }}>
                   Sin dispositivos registrados
                 </td>
               </tr>
@@ -104,6 +104,23 @@ export default async function AdminDevicesPage(): Promise<React.JSX.Element> {
                         </span>
                       ) : (
                         <span style={{ color: "var(--text-muted)" }}>nunca</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-xs" style={{ maxWidth: 260 }}>
+                      {d.lastScanStage ? (
+                        <div>
+                          <span style={{ color: d.lastScanError ? "#E05252" : "#1FD6A6" }}>
+                            {d.lastScanStage}
+                          </span>
+                          <span style={{ color: "var(--text-muted)" }}>
+                            {" "}· {d.lastScanLogAt ? ago(d.lastScanLogAt, now) : ""}
+                          </span>
+                          {d.lastScanError && (
+                            <div style={{ color: "#E05252", marginTop: 2 }}>{d.lastScanError}</div>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: "var(--text-muted)" }}>—</span>
                       )}
                     </td>
                     <td className="p-3 whitespace-nowrap text-xs" style={{ color: "var(--text-muted)" }}>
