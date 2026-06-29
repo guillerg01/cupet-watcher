@@ -5,7 +5,7 @@ import {
   AssignmentStatus,
   AssignmentKind,
 } from "@/infra/db";
-import { In, LessThan, MoreThan } from "typeorm";
+import { In, LessThan, Not, IsNull } from "typeorm";
 import { getScanIntervalMinutes } from "@/lib/app-settings";
 import { wakeDeviceForScan } from "@/lib/device-scan-wake";
 import {
@@ -14,10 +14,8 @@ import {
   MAX_ASSIGNMENT_ATTEMPTS,
 } from "@/lib/assignment-timing";
 
-const ONLINE_WINDOW_MS = 5 * 60 * 1000;
-
 export interface AssignWorkResult {
-  onlineDevices: number;
+  wakeableDevices: number;
   created: number;
   reassigned: number;
   expired: number;
@@ -37,10 +35,11 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
   const assignmentRepo = await repo(Assignment);
   const deviceRepo = await repo(Device);
 
+  // Target WAKEABLE devices (have an FCM push token), NOT only heartbeating ones:
+  // the whole point is to wake a device whose app is CLOSED (it won't heartbeat).
+  // The FCM data push starts the headless sweep.
   const onlineDevices = await deviceRepo.find({
-    where: {
-      lastHeartbeatAt: MoreThan(new Date(now - ONLINE_WINDOW_MS)),
-    },
+    where: { pushToken: Not(IsNull()) },
     // NULLS FIRST so a brand-new device (never assigned) is picked first.
     order: { lastAssignedAt: { direction: "ASC", nulls: "FIRST" } },
   });
@@ -85,7 +84,7 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
   expired += expireResult.affected ?? 0;
 
   if (deviceIds.length === 0) {
-    return { onlineDevices: 0, created: 0, reassigned, expired };
+    return { wakeableDevices: 0, created: 0, reassigned, expired };
   }
 
   // 3. One sweep at a time. If none outstanding, assign to the LRU online device.
@@ -124,5 +123,5 @@ export async function runAssignWork(): Promise<AssignWorkResult> {
     }
   }
 
-  return { onlineDevices: deviceIds.length, created, reassigned, expired };
+  return { wakeableDevices: deviceIds.length, created, reassigned, expired };
 }
